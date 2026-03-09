@@ -1,4 +1,4 @@
-import { FileText, ChevronRight, Clock, Cpu, Mic, Monitor } from "lucide-react";
+import { FileText, Clock, Cpu, Mic, Monitor } from "lucide-react";
 import type { Recording, Transcript } from "../../lib/types";
 
 function formatDuration(ms: number | null): string {
@@ -32,8 +32,6 @@ function formatDate(dateStr: string): string {
 }
 
 function formatTitle(title: string): string {
-  // Make auto-generated titles more readable
-  // "Recording 2026-03-09 16:45" -> "Mar 9 at 4:45 PM"
   const match = title.match(/^Recording (\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
   if (match) {
     const date = new Date(
@@ -73,16 +71,16 @@ export default function TranscriptList({
 }: TranscriptListProps) {
   if (recordings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-text-muted">
-        <FileText size={36} strokeWidth={1} className="mb-3 opacity-40" />
-        <p className="text-sm">No recordings yet</p>
-        <p className="text-xs mt-1 text-text-muted/60">Start a recording to see it here</p>
+      <div className="flex flex-col items-center justify-center py-12 text-text-muted">
+        <FileText size={28} strokeWidth={1} className="mb-2 opacity-30" />
+        <p className="text-[12px]">No recordings yet</p>
+        <p className="text-[11px] mt-0.5 text-text-muted/60">Record something to get started</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col">
       {recordings.map((recording) => {
         const transcript = transcripts.get(recording.id);
         const isSelected = selectedId === recording.id;
@@ -94,92 +92,83 @@ export default function TranscriptList({
           <div key={recording.id}>
             <button
               onClick={() => onSelect(recording)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer ${
                 isSelected
-                  ? "bg-accent/[0.08] border border-accent/20"
-                  : "bg-bg-card/30 border border-transparent hover:bg-bg-card-hover/60"
+                  ? "bg-accent/15 text-text-primary"
+                  : "hover:bg-white/[0.03] text-text-secondary"
               }`}
             >
-              <div className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 ${
-                isSelected ? "bg-accent/15" : "bg-white/[0.04]"
-              }`}>
+              <div className="shrink-0">
                 {isMic ? (
-                  <Mic size={15} className={isSelected ? "text-accent" : "text-text-muted"} />
+                  <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
                 ) : (
-                  <Monitor size={15} className={isSelected ? "text-accent" : "text-text-muted"} />
+                  <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-[13px] font-medium text-text-primary truncate">
+                <div className="text-[12px] font-medium truncate">
                   {formatTitle(recording.title)}
-                </h3>
-                <div className="flex items-center gap-2 mt-0.5">
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
                   {duration && (
-                    <span className="text-[11px] text-text-muted flex items-center gap-1">
-                      <Clock size={9} />
+                    <span className="text-[10px] text-text-muted flex items-center gap-0.5">
+                      <Clock size={8} />
                       {duration}
                     </span>
                   )}
-                  <span className="text-[11px] text-text-muted">
+                  <span className="text-[10px] text-text-muted">
                     {formatDate(recording.created_at)}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {hasTranscript && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-success/10 text-success">
-                    Transcribed
-                  </span>
-                )}
-                <ChevronRight
-                  size={14}
-                  className={`text-text-muted/50 transition-transform duration-150 ${
-                    isSelected ? "rotate-90" : ""
-                  }`}
-                />
-              </div>
+              {hasTranscript && (
+                <span className="shrink-0 text-[9px] font-medium text-success px-1 py-0.5 bg-success/10 rounded">
+                  done
+                </span>
+              )}
             </button>
 
-            {/* Expanded section */}
-            {isSelected && (
+            {/* Expanded detail */}
+            {isSelected && !hasTranscript && (
               <div
-                className="mt-1 ml-3 p-3 bg-bg-card/50 rounded-xl border border-border-subtle/30"
-                style={{ animation: "fade-in 0.15s ease-out" }}
+                className="px-3 py-2 bg-bg-card border-y border-border-subtle"
+                style={{ animation: "fade-in 0.1s ease-out" }}
               >
-                {hasTranscript ? (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Cpu size={11} className="text-text-muted" />
-                      <span className="text-[11px] text-text-muted">
-                        {transcript.engine}
-                        {transcript.model ? ` / ${transcript.model}` : ""}
-                      </span>
-                    </div>
-                    <p className="text-[13px] text-text-secondary leading-relaxed line-clamp-4">
-                      {transcript.full_text}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2.5 py-1">
-                    <p className="text-[13px] text-text-muted">
-                      No transcript yet
-                    </p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTranscribe(recording.id);
-                      }}
-                      disabled={isTranscribing}
-                      className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-colors cursor-pointer ${
-                        isTranscribing
-                          ? "bg-accent/50 text-white/50 cursor-not-allowed"
-                          : "bg-accent text-white hover:bg-accent-hover"
-                      }`}
-                    >
-                      {isTranscribing ? "Transcribing..." : "Transcribe"}
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <p className="text-[11px] text-text-muted flex-1">No transcript</p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTranscribe(recording.id);
+                    }}
+                    disabled={isTranscribing}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                      isTranscribing
+                        ? "bg-accent/30 text-accent/50 cursor-not-allowed"
+                        : "bg-accent text-white hover:bg-accent-hover"
+                    }`}
+                  >
+                    {isTranscribing ? "Transcribing..." : "Transcribe"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isSelected && hasTranscript && (
+              <div
+                className="px-3 py-2 bg-bg-card border-y border-border-subtle"
+                style={{ animation: "fade-in 0.1s ease-out" }}
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Cpu size={10} className="text-text-muted" />
+                  <span className="text-[10px] text-text-muted">
+                    {transcript.engine}
+                    {transcript.model ? ` / ${transcript.model}` : ""}
+                  </span>
+                </div>
+                <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-3">
+                  {transcript.full_text}
+                </p>
               </div>
             )}
           </div>

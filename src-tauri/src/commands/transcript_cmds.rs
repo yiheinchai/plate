@@ -63,6 +63,7 @@ fn load_transcript_with_segments(
 /// saves result to DB, and returns the full Transcript.
 #[tauri::command]
 pub async fn transcribe_recording(
+    app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
     recording_id: String,
 ) -> Result<TranscriptResponse, String> {
@@ -126,10 +127,11 @@ pub async fn transcribe_recording(
         let eng = internal_engine.clone();
         let md = models_dir.clone();
         let okey = openai_key.clone();
+        let ah = app_handle.clone();
         tokio::task::spawn_blocking(move || -> Result<TranscriptionResult, String> {
             match eng.as_str() {
                 "local" => {
-                    let engine = WhisperLocal::new(md);
+                    let engine = WhisperLocal::new(md).with_app_handle(ah);
                     engine.transcribe(&config).map_err(|e| e.to_string())
                 }
                 "api" => {

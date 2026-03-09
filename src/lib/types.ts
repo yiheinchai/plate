@@ -74,3 +74,17 @@ export interface TranscriptChunkPayload {
 export interface RecordingCompletePayload {
   recording: Recording;
 }
+
+export interface WhisperModelInfo {
+  name: string;
+  size_bytes: number;
+  downloaded: boolean;
+}
+
+export interface ModelDownloadProgressPayload {
+  model: string;
+  downloaded?: number;
+  total?: number;
+  status: "downloading" | "complete" | "error";
+  error?: string;
+}

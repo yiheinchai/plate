@@ -10,11 +10,17 @@ use super::types::{TranscriptSegment, TranscriptionConfig, TranscriptionResult};
 /// Local Whisper transcription engine using whisper-rs (whisper.cpp bindings).
 pub struct WhisperLocal {
     models_dir: PathBuf,
+    app_handle: Option<tauri::AppHandle>,
 }
 
 impl WhisperLocal {
     pub fn new(models_dir: PathBuf) -> Self {
-        Self { models_dir }
+        Self { models_dir, app_handle: None }
+    }
+
+    pub fn with_app_handle(mut self, app_handle: tauri::AppHandle) -> Self {
+        self.app_handle = Some(app_handle);
+        self
     }
 
     /// Resolve the model file path from a model name like "ggml-base.en".
@@ -94,7 +100,11 @@ impl TranscriptionEngine for WhisperLocal {
         if !model_path.exists() {
             info!("Whisper model not found, auto-downloading {}", model_name);
             let manager = ModelManager::new(self.models_dir.clone());
-            manager.download_model(model_name)?;
+            if let Some(ref app_handle) = self.app_handle {
+                manager.download_model_with_progress(model_name, app_handle)?;
+            } else {
+                manager.download_model(model_name)?;
+            }
         }
 
         info!("Loading Whisper model from {}", model_path.display());

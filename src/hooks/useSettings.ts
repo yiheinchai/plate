@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import * as tauri from "../lib/tauri";
 import type { Settings } from "../lib/types";
 
@@ -10,7 +10,7 @@ const defaultSettings: Settings = {
   llm_model: "openai",
   g4f_url: "",
   transcription_engine: "whisper_local",
-  whisper_model: "base",
+  whisper_model: "ggml-base.en",
   openai_api_key: "",
   audio_sample_rate: 16000,
 };
@@ -20,6 +20,9 @@ export function useSettings() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRef = useRef(false);
 
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
@@ -29,10 +32,10 @@ export function useSettings() {
       setSettings(s);
     } catch (err) {
       console.error("Failed to load settings:", err);
-      // Use defaults if settings haven't been saved yet
       setSettings(defaultSettings);
     } finally {
       setIsLoading(false);
+      loadedRef.current = true;
     }
   }, []);
 
@@ -42,11 +45,12 @@ export function useSettings() {
     try {
       await tauri.updateSettings(newSettings);
       setSettings(newSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save settings";
       setError(message);
-      throw err;
     } finally {
       setIsSaving(false);
     }
@@ -64,13 +68,27 @@ export function useSettings() {
     loadSettings();
   }, [loadSettings]);
 
+  // Auto-save on change (debounced 500ms), skip the initial load
+  useEffect(() => {
+    if (!loadedRef.current) return;
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      saveSettings(settings);
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [settings, saveSettings]);
+
   return {
     settings,
     isLoading,
     isSaving,
+    saved,
     error,
     loadSettings,
-    saveSettings,
     updateField,
   };
 }

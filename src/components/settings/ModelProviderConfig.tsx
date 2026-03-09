@@ -10,7 +10,7 @@ interface ModelProviderConfigProps {
 const AUTH_MODES = [
   { id: "g4f" as const, label: "Free" },
   { id: "api_key" as const, label: "API Key" },
-  { id: "session_token" as const, label: "Setup Token" },
+  { id: "session_token" as const, label: "Token" },
 ];
 
 const FREE_MODELS = [
@@ -38,14 +38,8 @@ export default function ModelProviderConfig({
   const [showToken, setShowToken] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
-  const activeIndex = AUTH_MODES.findIndex(
-    (m) => m.id === settings.llm_auth_mode
-  );
-  const tabWidth = 100 / AUTH_MODES.length;
-
   const handleModeChange = (mode: Settings["llm_auth_mode"]) => {
     updateField("llm_auth_mode", mode);
-    // Auto-switch model to a sensible default for the mode
     if (mode === "g4f") {
       updateField("llm_model", "openai");
     } else if (
@@ -60,34 +54,22 @@ export default function ModelProviderConfig({
   const models = isFreeMode ? FREE_MODELS : CLAUDE_MODELS;
 
   return (
-    <section className="flex flex-col gap-2.5">
-      <div>
-        <h2 className="text-[13px] font-semibold text-text-secondary uppercase tracking-[0.08em]">
-          LLM Provider
-        </h2>
-        <p className="text-[11px] text-text-muted/60 mt-0.5">
-          Configure AI model for note generation
-        </p>
-      </div>
-      <div className="bg-bg-card/40 rounded-xl border border-border-subtle/40 p-4 flex flex-col gap-4">
-        {/* Auth mode toggle */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-text-secondary">Provider</span>
-          <div className="relative flex bg-bg-primary rounded-lg p-0.5 border border-border-subtle/40">
-            <div
-              className="absolute top-0.5 bottom-0.5 rounded-md bg-accent/15 border border-accent/20 transition-all duration-200 ease-out"
-              style={{
-                left: `calc(${activeIndex * tabWidth}% + 2px)`,
-                width: `calc(${tabWidth}% - 4px)`,
-              }}
-            />
+    <section className="flex flex-col gap-2">
+      <h2 className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+        LLM Provider
+      </h2>
+      <div className="bg-bg-card border border-border-subtle rounded p-3 flex flex-col gap-3">
+        {/* Auth mode tabs */}
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] text-text-secondary">Provider</span>
+          <div className="flex bg-bg-primary rounded border border-border-subtle">
             {AUTH_MODES.map((mode) => (
               <button
                 key={mode.id}
                 onClick={() => handleModeChange(mode.id)}
-                className={`relative z-10 flex-1 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors cursor-pointer ${
+                className={`flex-1 px-2.5 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
                   settings.llm_auth_mode === mode.id
-                    ? "text-accent"
+                    ? "bg-accent/15 text-accent"
                     : "text-text-muted hover:text-text-secondary"
                 }`}
               >
@@ -99,57 +81,40 @@ export default function ModelProviderConfig({
 
         {/* Free mode info */}
         {isFreeMode && (
-          <div
-            className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2"
-            style={{ animation: "fade-in 0.15s ease-out" }}
-          >
+          <div className="bg-accent/5 border border-accent/15 rounded px-2.5 py-1.5">
             <p className="text-[11px] text-accent/80">
-              Free AI — works out of the box, no API key needed.
-            </p>
-            <p className="text-[10px] text-text-muted/50 mt-0.5">
-              Powered by Pollinations.ai. Quality may vary compared to paid
-              models.
+              Free AI — no API key needed. Powered by Pollinations.ai.
             </p>
           </div>
         )}
 
         {/* API Key input */}
         {settings.llm_auth_mode === "api_key" && (
-          <label
-            className="flex flex-col gap-1.5"
-            style={{ animation: "fade-in 0.15s ease-out" }}
-          >
-            <span className="text-[13px] text-text-secondary">
-              Anthropic API Key
-            </span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] text-text-secondary">Anthropic API Key</span>
             <div className="relative">
               <input
                 type={showApiKey ? "text" : "password"}
                 value={settings.llm_api_key}
                 onChange={(e) => updateField("llm_api_key", e.target.value)}
                 placeholder="sk-ant-..."
-                className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 pr-9 text-[13px] text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors font-mono"
+                className="w-full bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 pr-8 text-[12px] text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/40 transition-colors font-mono"
               />
               <button
                 type="button"
                 onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
               >
-                {showApiKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showApiKey ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
             </div>
           </label>
         )}
 
-        {/* Setup Token input */}
+        {/* Session Token input */}
         {settings.llm_auth_mode === "session_token" && (
-          <label
-            className="flex flex-col gap-1.5"
-            style={{ animation: "fade-in 0.15s ease-out" }}
-          >
-            <span className="text-[13px] text-text-secondary">
-              Setup Token
-            </span>
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] text-text-secondary">Setup Token</span>
             <div className="relative">
               <input
                 type={showToken ? "text" : "password"}
@@ -158,34 +123,29 @@ export default function ModelProviderConfig({
                   updateField("llm_session_token", e.target.value.trim())
                 }
                 placeholder="sk-ant-oat01-..."
-                className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 pr-9 text-[13px] text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors font-mono"
+                className="w-full bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 pr-8 text-[12px] text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/40 transition-colors font-mono"
               />
               <button
                 type="button"
                 onClick={() => setShowToken(!showToken)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
               >
-                {showToken ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showToken ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
             </div>
-            <p className="text-[10px] text-text-muted/50">
-              Run{" "}
-              <code className="bg-white/5 px-1 rounded">
-                claude setup-token
-              </code>{" "}
-              and paste the token here. Make sure there are no extra newlines or
-              spaces.
+            <p className="text-[10px] text-text-muted/60">
+              Run <code className="bg-bg-primary px-1 rounded font-mono">claude setup-token</code> and paste here. No extra spaces.
             </p>
           </label>
         )}
 
-        {/* Model selection */}
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-text-secondary">Model</span>
+        {/* Model */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px] text-text-secondary">Model</span>
           <select
             value={settings.llm_model}
             onChange={(e) => updateField("llm_model", e.target.value)}
-            className="bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+            className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
           >
             {models.map((m) => (
               <option key={m.value} value={m.value}>
@@ -195,25 +155,23 @@ export default function ModelProviderConfig({
           </select>
         </label>
 
-        {/* Advanced: custom endpoint for free mode */}
+        {/* Advanced free mode */}
         {isFreeMode && (
           <details className="group">
-            <summary className="text-[11px] text-text-muted/50 cursor-pointer hover:text-text-muted transition-colors">
+            <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary transition-colors">
               Advanced
             </summary>
-            <label className="flex flex-col gap-1.5 mt-2">
-              <span className="text-[12px] text-text-secondary">
-                Custom API URL
-              </span>
+            <label className="flex flex-col gap-1 mt-2">
+              <span className="text-[11px] text-text-secondary">Custom API URL</span>
               <input
                 type="text"
                 value={settings.g4f_url}
                 onChange={(e) => updateField("g4f_url", e.target.value)}
                 placeholder="https://text.pollinations.ai/openai"
-                className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors font-mono"
+                className="w-full bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/40 transition-colors font-mono"
               />
-              <p className="text-[10px] text-text-muted/50">
-                Any OpenAI-compatible endpoint. Leave empty for Pollinations.ai.
+              <p className="text-[10px] text-text-muted/60">
+                Any OpenAI-compatible endpoint. Leave empty for default.
               </p>
             </label>
           </details>

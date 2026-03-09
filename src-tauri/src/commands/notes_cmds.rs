@@ -163,19 +163,30 @@ pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<NoteRow,
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// List all notes.
+/// List all notes, optionally filtered by transcript_id.
 #[tauri::command]
-pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteRow>, String> {
+pub async fn list_notes(
+    state: State<'_, AppState>,
+    transcript_id: Option<String>,
+) -> Result<Vec<NoteRow>, String> {
     let db_path = state.db_path.clone();
 
     tokio::task::spawn_blocking(move || -> Result<Vec<NoteRow>, String> {
         let conn = rusqlite::Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let sql = if transcript_id.is_some() {
+            notes::SELECT_NOTES_BY_TRANSCRIPT_SQL
+        } else {
+            notes::SELECT_ALL_NOTES_SQL
+        };
+
         let mut stmt = conn
-            .prepare(notes::SELECT_ALL_NOTES_SQL)
+            .prepare(sql)
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
-        let rows = stmt
-            .query_map([], |row| {
+
+        let rows: Vec<NoteRow> = if let Some(ref tid) = transcript_id {
+            stmt.query_map(params![tid], |row| {
                 Ok(NoteRow {
                     id: row.get(0)?,
                     transcript_id: row.get(1)?,
@@ -189,7 +200,25 @@ pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteRow>, Stri
             })
             .map_err(|e| format!("Failed to query notes: {}", e))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to read note rows: {}", e))?;
+            .map_err(|e| format!("Failed to read note rows: {}", e))?
+        } else {
+            stmt.query_map([], |row| {
+                Ok(NoteRow {
+                    id: row.get(0)?,
+                    transcript_id: row.get(1)?,
+                    title: row.get(2)?,
+                    content: row.get(3)?,
+                    provider: row.get(4)?,
+                    model: row.get(5)?,
+                    prompt_style: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query notes: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read note rows: {}", e))?
+        };
+
         Ok(rows)
     })
     .await

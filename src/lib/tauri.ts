@@ -10,6 +10,8 @@ import type {
   AudioLevelPayload,
   TranscriptChunkPayload,
   RecordingCompletePayload,
+  ModelDownloadProgressPayload,
+  WhisperModelInfo,
 } from "./types";
 
 // ─── Recording Commands ───
@@ -40,6 +42,10 @@ export async function getRecording(id: string): Promise<Recording> {
 
 export async function deleteRecording(id: string): Promise<void> {
   return invoke<void>("delete_recording", { id });
+}
+
+export async function renameRecording(id: string, title: string): Promise<void> {
+  return invoke<void>("rename_recording", { id, title });
 }
 
 // ─── Transcript Commands ───
@@ -93,8 +99,8 @@ export async function getNote(id: string): Promise<Note> {
   return invoke<Note>("get_note", { id });
 }
 
-export async function listNotes(): Promise<Note[]> {
-  return invoke<Note[]>("list_notes");
+export async function listNotes(transcriptId?: string): Promise<Note[]> {
+  return invoke<Note[]>("list_notes", { transcriptId });
 }
 
 export async function deleteNote(id: string): Promise<void> {
@@ -109,6 +115,12 @@ export async function getSettings(): Promise<Settings> {
 
 export async function updateSettings(settings: Settings): Promise<void> {
   return invoke<void>("update_settings", { settings });
+}
+
+// ─── Model Commands ───
+
+export async function listWhisperModels(): Promise<WhisperModelInfo[]> {
+  return invoke<WhisperModelInfo[]>("list_whisper_models");
 }
 
 // ─── Event Listeners ───
@@ -134,5 +146,13 @@ export function onRecordingComplete(
 ): Promise<UnlistenFn> {
   return listen<RecordingCompletePayload>("recording-complete", (event) => {
     callback(event.payload.recording);
+  });
+}
+
+export function onModelDownloadProgress(
+  callback: (progress: ModelDownloadProgressPayload) => void
+): Promise<UnlistenFn> {
+  return listen<ModelDownloadProgressPayload>("model-download-progress", (event) => {
+    callback(event.payload);
   });
 }

@@ -7,21 +7,12 @@ export default function AudioSourcePicker() {
   const disabled = recordingStatus !== "idle";
 
   const sources: { value: AudioSource; label: string; icon: React.ReactNode }[] = [
-    { value: "microphone", label: "Microphone", icon: <Mic size={14} /> },
-    { value: "system_audio", label: "System Audio", icon: <Monitor size={14} /> },
+    { value: "microphone", label: "Mic", icon: <Mic size={13} /> },
+    { value: "system_audio", label: "System", icon: <Monitor size={13} /> },
   ];
 
   return (
-    <div className="relative flex items-center bg-bg-card rounded-xl p-1 border border-border-subtle">
-      {/* Sliding background indicator */}
-      <div
-        className="absolute top-1 bottom-1 rounded-lg bg-white/[0.08] border border-white/[0.06] transition-all duration-200 ease-out"
-        style={{
-          left: currentAudioSource === "microphone" ? "4px" : "50%",
-          width: "calc(50% - 4px)",
-        }}
-      />
-
+    <div className="flex items-center bg-bg-card border border-border-subtle rounded">
       {sources.map((source) => {
         const isActive = currentAudioSource === source.value;
         return (
@@ -29,10 +20,10 @@ export default function AudioSourcePicker() {
             key={source.value}
             onClick={() => !disabled && setAudioSource(source.value)}
             disabled={disabled}
-            className={`relative z-10 flex items-center justify-center gap-2 px-5 py-2 rounded-lg text-[13px] font-medium transition-colors duration-150 cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium transition-colors cursor-pointer ${
               isActive
-                ? "text-text-primary"
-                : "text-text-muted hover:text-text-secondary"
+                ? "bg-accent/15 text-accent"
+                : "text-text-muted hover:text-text-secondary hover:bg-white/[0.03]"
             } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
           >
             {source.icon}

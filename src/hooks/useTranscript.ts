@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as tauri from "../lib/tauri";
-import type { Transcript } from "../lib/types";
+import type { Transcript, ModelDownloadProgressPayload } from "../lib/types";
 
 export function useTranscript() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
@@ -8,6 +8,7 @@ export function useTranscript() {
     null
   );
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressPayload | null>(null);
   const [liveText, setLiveText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +18,8 @@ export function useTranscript() {
   const liveTextRef = useRef("");
   useEffect(() => {
     let cancelled = false;
-    let unlisten: (() => void) | null = null;
+    let unlistenChunk: (() => void) | null = null;
+    let unlistenProgress: (() => void) | null = null;
 
     tauri.onTranscriptChunk((text, isFinal) => {
       if (cancelled) return;
@@ -28,16 +30,24 @@ export function useTranscript() {
         setLiveText(liveTextRef.current + text);
       }
     }).then((fn) => {
-      if (cancelled) {
-        fn();
+      if (cancelled) { fn(); } else { unlistenChunk = fn; }
+    });
+
+    tauri.onModelDownloadProgress((progress) => {
+      if (cancelled) return;
+      if (progress.status === "complete" || progress.status === "error") {
+        setDownloadProgress(null);
       } else {
-        unlisten = fn;
+        setDownloadProgress(progress);
       }
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { unlistenProgress = fn; }
     });
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      unlistenChunk?.();
+      unlistenProgress?.();
     };
   }, []);
 
@@ -95,6 +105,7 @@ export function useTranscript() {
     transcripts,
     currentTranscript,
     isTranscribing,
+    downloadProgress,
     liveText,
     error,
     transcribeRecording,

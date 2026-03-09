@@ -1,139 +1,156 @@
 # Plate
 
-macOS desktop app that records lectures (in-person and Zoom), transcribes them, and generates high-yield memorization notes using Claude.
+**Get your lecture notes served to you on a plate.**
+
+Plate is a macOS desktop app that records your lectures (in-person or Zoom), transcribes them locally on your machine, and generates study-ready notes using AI. No cloud required for transcription — everything runs on-device with whisper.cpp.
+
+![Tauri](https://img.shields.io/badge/Tauri_v2-24C8D8?logo=tauri&logoColor=fff)
+![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=000)
+![Rust](https://img.shields.io/badge/Rust-000?logo=rust)
+![macOS](https://img.shields.io/badge/macOS_13+-000?logo=apple&logoColor=fff)
+
+---
+
+## Install
+
+### Download (recommended)
+
+Go to [**Releases**](../../releases/latest) and download `Plate.dmg`. Drag to Applications. Done.
+
+> On first launch macOS will warn about an unidentified developer. Right-click the app → **Open** → **Open** to bypass Gatekeeper.
+
+### Build from source
+
+```bash
+# Prerequisites: macOS 13+, Rust, Node.js 18+
+npm install
+npm run tauri build
+# .dmg output in src-tauri/target/release/bundle/dmg/
+```
+
+---
 
 ## Features
 
-- **Microphone recording** — capture IRL lectures via system mic (cpal + CoreAudio)
-- **System audio capture** — capture Zoom/online lectures via ScreenCaptureKit (no BlackHole needed)
-- **Local transcription** — offline speech-to-text with whisper.cpp (whisper-rs)
-- **Cloud transcription** — OpenAI Whisper API as optional alternative
-- **AI note generation** — high-yield memorization notes via Claude (session token or API key)
-- **SQLite storage** — recordings, transcripts, notes, and settings all stored locally
+- **Record anything** — microphone for IRL lectures, system audio for Zoom/Teams/Meet (via ScreenCaptureKit, no BlackHole needed)
+- **Live transcription** — see words appear in real-time as you record
+- **Local transcription** — fully offline speech-to-text with whisper.cpp. Choose from Tiny (39MB) to Large (1.5GB) models — auto-downloaded on first use with progress bar
+- **Cloud transcription** — OpenAI Whisper API as an alternative
+- **AI notes** — generate high-yield study notes from your transcript using Claude or any OpenAI-compatible API
+- **Everything local** — recordings, transcripts, notes stored in SQLite on your machine
+- **Auto-save settings** — settings save automatically as you change them
+- **Dark, compact UI** — Cursor-inspired design, built for keyboard warriors
+
+---
+
+## How it works
+
+1. **Record** — Hit record, pick mic or system audio. Live transcript streams as you go.
+2. **Library** — All recordings in one place. Click to view transcript, generate notes. Transcription model downloads automatically if needed (you'll see a progress bar).
+3. **Notes** — Pick a prompt style or write your own. AI generates study notes from the transcript.
+4. **Settings** — Configure transcription engine, AI provider, audio sample rate. Everything auto-saves.
+
+---
+
+## Configuration
+
+All configuration is in the **Settings** page inside the app.
+
+### AI Provider
+
+| Mode | Setup | Notes |
+|---|---|---|
+| **Free (Pollinations)** | Nothing needed | Uses free OpenAI-compatible API. No API key required. May be slow or rate-limited. |
+| **API Key** | Paste your Anthropic API key (`sk-ant-...`) | Choose model: Sonnet, Opus, Haiku |
+| **Session Token** | Paste `sessionKey` from claude.ai cookies | Uses your existing Claude subscription |
+
+### Transcription
+
+| Engine | Setup | Notes |
+|---|---|---|
+| **Local (Whisper)** | Just select a model size | Runs offline. Models auto-download on first use. Tiny (39MB, fast) → Large (1.5GB, accurate). |
+| **OpenAI API** | Paste OpenAI API key | Faster and more accurate, requires internet |
+
+Settings page shows which models are already downloaded.
+
+### macOS Permissions
+
+On first use, grant these in **System Settings > Privacy & Security**:
+- **Microphone** — for recording IRL lectures
+- **Screen Recording** — for capturing system audio (uses ScreenCaptureKit, not actual screen recording)
+
+---
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Tauri v2 (Rust + WebView) |
+| Framework | Tauri v2 (Rust backend + WebView frontend) |
 | Frontend | React 19, TailwindCSS v4, Zustand, React Router v7 |
-| Audio (mic) | cpal |
-| Audio (system) | ScreenCaptureKit via screencapturekit crate |
-| Transcription | whisper-rs (local), OpenAI Whisper API (cloud) |
-| LLM | Anthropic Claude — session token or API key |
-| Storage | SQLite via tauri-plugin-sql |
+| Audio | cpal (mic), ScreenCaptureKit (system audio) |
+| Transcription | whisper-rs / whisper.cpp (local), OpenAI Whisper API (cloud) |
+| AI | Anthropic Claude, OpenAI-compatible APIs |
+| Storage | SQLite (rusqlite + tauri-plugin-sql) |
 
-## Prerequisites
-
-- **macOS 13+** (required for ScreenCaptureKit)
-- **Rust** — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** — v18+
-- **Tauri CLI** — `cargo install tauri-cli --version "^2"`
-
-## Getting Started
-
-```bash
-# Install dependencies
-npm install
-
-# Start the app (dev mode with hot reload)
-npm run tauri dev
-```
-
-## Commands
-
-| Command | Description |
-|---|---|
-| `npm run tauri dev` | Start the app in development mode (Vite HMR + Rust hot rebuild) |
-| `npm run tauri build` | Build the production .app bundle + DMG |
-| `npm run dev` | Start only the Vite frontend dev server (no Tauri) |
-| `npm run build` | Build only the frontend |
-| `npx tsc --noEmit` | Type-check the frontend |
-| `cargo check --manifest-path src-tauri/Cargo.toml` | Type-check the Rust backend |
-
-## Stopping a Running Dev Server
-
-```bash
-# Option 1: Ctrl+C in the terminal running tauri dev
-
-# Option 2: Kill from another terminal
-pkill -f "target/debug/plate"
-lsof -ti:1420 | xargs kill
-```
+---
 
 ## Project Structure
 
 ```
 plate/
-├── src/                          # React frontend
-│   ├── pages/                    # Route pages (Record, Library, Notes, Settings)
+├── src/                        # React frontend
+│   ├── pages/                  # RecordPage, LibraryPage, SettingsPage
 │   ├── components/
-│   │   ├── layout/               # Sidebar, Layout
-│   │   ├── recording/            # RecordingControls, AudioSourcePicker, Waveform, LiveTranscript
-│   │   ├── transcripts/          # TranscriptList, TranscriptViewer
-│   │   ├── notes/                # NotesList, NoteViewer, GenerateNotesButton
-│   │   └── settings/             # SettingsPage, ModelProviderConfig, TranscriptionConfig
-│   ├── hooks/                    # useRecording, useTranscript, useNotes, useSettings
-│   ├── stores/                   # Zustand store (recording state, audio source, UI state)
-│   └── lib/                      # Typed Tauri invoke/listen wrappers, TypeScript interfaces
+│   │   ├── layout/             # Sidebar, Layout
+│   │   ├── recording/          # Controls, AudioSourcePicker, Waveform, LiveTranscript
+│   │   ├── transcripts/        # TranscriptViewer
+│   │   ├── notes/              # NoteViewer, PromptPicker
+│   │   └── settings/           # ModelProviderConfig, TranscriptionConfig
+│   ├── hooks/                  # useRecording, useTranscript, useNotes, useSettings
+│   ├── stores/                 # Zustand (recording state, audio source)
+│   └── lib/                    # Tauri invoke/listen wrappers, types
 │
-├── src-tauri/                    # Rust backend
-│   ├── src/
-│   │   ├── audio/                # Microphone (cpal), system audio (ScreenCaptureKit), recorder
-│   │   ├── transcription/        # TranscriptionEngine trait, whisper-rs, OpenAI Whisper API, model manager
-│   │   ├── llm/                  # LlmProvider trait, Claude session token client, Claude API client, prompts
-│   │   ├── db/                   # SQLite schema, CRUD for recordings/transcripts/notes/settings
-│   │   ├── commands/             # Tauri command handlers (recording, transcript, notes, settings, audio)
-│   │   ├── state.rs              # AppState (recording state, data dir, settings cache)
-│   │   └── lib.rs                # App builder, plugin + command registration
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+├── src-tauri/                  # Rust backend
+│   └── src/
+│       ├── audio/              # Mic (cpal), system audio (ScreenCaptureKit), recorder, live transcriber
+│       ├── transcription/      # WhisperLocal, WhisperApi, ModelManager (auto-download with progress)
+│       ├── llm/                # G4F (free), Claude API, Claude session, prompt templates
+│       ├── db/                 # SQLite schema + CRUD
+│       ├── commands/           # Tauri command handlers
+│       └── state.rs            # AppState
 │
-└── migrations/                   # SQLite migrations
-    └── 001_initial.sql
+└── .github/workflows/          # CI: build + release on tag push
 ```
 
-## Architecture
+---
 
-```
-┌─────────────────────────────────────┐
-│         React Frontend (WebView)    │
-│  Record │ Library │ Notes │ Settings│
-└────────────────┬────────────────────┘
-                 │ invoke() / listen()
-┌────────────────▼────────────────────┐
-│         Tauri Commands (Rust)       │
-├─────────────────────────────────────┤
-│ audio/         │ Mic (cpal) + System audio (ScreenCaptureKit) → WAV │
-│ transcription/ │ whisper-rs (local) or OpenAI API (cloud) → Transcript │
-│ llm/           │ Claude session token or API → Memorization notes │
-│ db/            │ SQLite: recordings, transcripts, notes, settings │
-└─────────────────────────────────────┘
+## Development
+
+```bash
+npm install
+npm run tauri dev          # Dev mode with hot reload
 ```
 
-## Configuration
+| Command | Description |
+|---|---|
+| `npm run tauri dev` | Dev mode (Vite HMR + Rust rebuild) |
+| `npm run tauri build` | Production .app + DMG |
+| `npx tsc --noEmit` | Type-check frontend |
+| `cargo check -p plate` | Type-check Rust backend |
 
-All configuration is done in the **Settings** page within the app:
+---
 
-**LLM Provider (Claude)**
-- **Session Token mode** — paste your `sessionKey` from claude.ai browser cookies (Developer Tools > Application > Cookies). Uses your existing Claude subscription, no API key needed.
-- **API Key mode** — paste your Anthropic API key (`sk-ant-...`). Select model (Sonnet 4, Opus 4, Haiku 3.5).
+## Releasing
 
-**Transcription**
-- **Local (Whisper)** — runs whisper.cpp offline. Choose model size: tiny (39MB, fastest) through large (1.5GB, most accurate). Models download on first use.
-- **OpenAI API** — requires OpenAI API key. Faster and more accurate, but requires internet.
+Push a version tag to trigger a GitHub Actions build that creates a release with DMG downloads:
 
-**Audio**
-- Sample rate: 16kHz (recommended), 44.1kHz, or 48kHz.
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
 
-## macOS Permissions
-
-On first use, the app will request:
-- **Microphone access** — for recording IRL lectures
-- **Screen Recording permission** — for capturing system audio from Zoom/other apps (uses ScreenCaptureKit, not actual screen recording)
-
-Grant these in **System Settings > Privacy & Security**.
+---
 
 ## License
 
-Private project.
+MIT

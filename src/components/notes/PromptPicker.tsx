@@ -5,17 +5,9 @@ import type { SavedPrompt } from "../../lib/types";
 
 const BUILT_IN_STYLES = [
   { id: "summary", name: "Summary", description: "Concise lecture summary" },
-  {
-    id: "memorization",
-    name: "Memorization",
-    description: "Q&A flashcard pairs",
-  },
+  { id: "memorization", name: "Memorization", description: "Q&A flashcard pairs" },
   { id: "cornell", name: "Cornell Notes", description: "Cornell format" },
-  {
-    id: "outline",
-    name: "Outline",
-    description: "Structured headings & bullets",
-  },
+  { id: "outline", name: "Outline", description: "Structured headings & bullets" },
 ] as const;
 
 interface PromptPickerProps {
@@ -40,7 +32,6 @@ export default function PromptPicker({
     tauri.listSavedPrompts().then(setSavedPrompts).catch(console.error);
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (
@@ -55,7 +46,7 @@ export default function PromptPicker({
   }, [isOpen]);
 
   const currentLabel = isCustomMode
-    ? "Custom Prompt"
+    ? "Custom"
     : BUILT_IN_STYLES.find((s) => s.id === selectedStyle)?.name ?? "Summary";
 
   const handleSelectBuiltIn = (id: string) => {
@@ -101,169 +92,148 @@ export default function PromptPicker({
   };
 
   return (
-    <div className="flex flex-col gap-2" ref={dropdownRef}>
-      {/* Prompt selector row */}
-      <div className="flex items-center gap-2">
-        {/* Dropdown trigger */}
-        <div className="relative flex-1 min-w-0">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-bg-card/50 border border-border-subtle/40 text-[12px] text-text-secondary hover:border-accent/30 transition-colors cursor-pointer"
-          >
-            <span className="truncate">{currentLabel}</span>
-            <ChevronDown
-              size={12}
-              className={`shrink-0 text-text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
-            />
-          </button>
+    <div className="flex items-center gap-1.5" ref={dropdownRef}>
+      {/* Style selector */}
+      <div className="relative">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-text-secondary bg-bg-input border border-border-subtle hover:border-accent/40 transition-colors cursor-pointer"
+        >
+          <span>{currentLabel}</span>
+          <ChevronDown
+            size={10}
+            className={`text-text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
+          />
+        </button>
 
-          {/* Dropdown menu */}
-          {isOpen && (
-            <div
-              className="absolute top-full left-0 right-0 mt-1 bg-bg-card border border-border-subtle/60 rounded-xl shadow-lg z-50 overflow-hidden"
-              style={{ animation: "fade-in 0.1s ease-out" }}
-            >
-              {/* Built-in styles */}
-              <div className="p-1">
-                <span className="px-2.5 py-1 text-[10px] text-text-muted/60 uppercase tracking-wider font-medium">
-                  Styles
-                </span>
-                {BUILT_IN_STYLES.map((style) => (
+        {/* Dropdown */}
+        {isOpen && (
+          <div
+            className="absolute top-full right-0 mt-1 w-56 bg-bg-card border border-border-medium rounded shadow-xl z-50"
+            style={{ animation: "fade-in 0.08s ease-out" }}
+          >
+            {/* Built-in styles */}
+            <div className="py-1">
+              <div className="px-2.5 py-1 text-[10px] text-text-muted uppercase tracking-wider">
+                Styles
+              </div>
+              {BUILT_IN_STYLES.map((style) => (
+                <button
+                  key={style.id}
+                  onClick={() => handleSelectBuiltIn(style.id)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                    !isCustomMode && selectedStyle === style.id
+                      ? "bg-accent/15 text-accent"
+                      : "text-text-secondary hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <span>{style.name}</span>
+                  <span className="text-[10px] text-text-muted">{style.description}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom */}
+            <div className="border-t border-border-subtle py-1">
+              <button
+                onClick={() => {
+                  setIsCustomMode(true);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center gap-1 px-2.5 py-1.5 text-[11px] transition-colors cursor-pointer ${
+                  isCustomMode
+                    ? "bg-accent/15 text-accent"
+                    : "text-text-secondary hover:bg-white/[0.04]"
+                }`}
+              >
+                <Pencil size={10} />
+                <span>Custom Prompt</span>
+              </button>
+            </div>
+
+            {/* Saved */}
+            {savedPrompts.length > 0 && (
+              <div className="border-t border-border-subtle py-1">
+                <div className="px-2.5 py-1 text-[10px] text-text-muted uppercase tracking-wider">
+                  Saved
+                </div>
+                {savedPrompts.map((prompt) => (
                   <button
-                    key={style.id}
-                    onClick={() => handleSelectBuiltIn(style.id)}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] transition-colors cursor-pointer ${
-                      !isCustomMode && selectedStyle === style.id
-                        ? "bg-accent/10 text-accent"
-                        : "text-text-secondary hover:bg-white/5"
-                    }`}
+                    key={prompt.id}
+                    onClick={() => handleSelectSaved(prompt)}
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-white/[0.04] transition-colors cursor-pointer group"
                   >
-                    <span>{style.name}</span>
-                    <span className="text-[10px] text-text-muted/50">
-                      {style.description}
-                    </span>
+                    <span className="truncate">{prompt.name}</span>
+                    <button
+                      onClick={(e) => handleDeletePrompt(prompt.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-record/10 hover:text-record transition-all cursor-pointer"
+                    >
+                      <Trash2 size={10} />
+                    </button>
                   </button>
                 ))}
               </div>
-
-              {/* Custom option */}
-              <div className="border-t border-border-subtle/30 p-1">
-                <button
-                  onClick={() => {
-                    setIsCustomMode(true);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] transition-colors cursor-pointer ${
-                    isCustomMode
-                      ? "bg-accent/10 text-accent"
-                      : "text-text-secondary hover:bg-white/5"
-                  }`}
-                >
-                  <Pencil size={11} />
-                  <span>Custom Prompt</span>
-                </button>
-              </div>
-
-              {/* Saved prompts */}
-              {savedPrompts.length > 0 && (
-                <div className="border-t border-border-subtle/30 p-1">
-                  <span className="px-2.5 py-1 text-[10px] text-text-muted/60 uppercase tracking-wider font-medium">
-                    Saved
-                  </span>
-                  {savedPrompts.map((prompt) => (
-                    <button
-                      key={prompt.id}
-                      onClick={() => handleSelectSaved(prompt)}
-                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-text-secondary hover:bg-white/5 transition-colors cursor-pointer group"
-                    >
-                      <span className="truncate">{prompt.name}</span>
-                      <button
-                        onClick={(e) => handleDeletePrompt(prompt.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-400/10 hover:text-red-400 transition-all cursor-pointer"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Custom prompt textarea */}
+      {/* Custom prompt inline input */}
       {isCustomMode && (
-        <div
-          className="flex flex-col gap-1.5"
-          style={{ animation: "fade-in 0.15s ease-out" }}
-        >
-          <textarea
+        <div className="flex items-center gap-1" style={{ animation: "fade-in 0.1s ease-out" }}>
+          <input
+            type="text"
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder="Enter your custom prompt... The transcript will be appended automatically."
-            rows={3}
-            className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors resize-none"
+            placeholder="Enter prompt..."
+            className="bg-bg-input border border-border-subtle rounded px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/40 transition-colors w-40"
           />
-          {/* Save prompt */}
-          {customPrompt.trim() && (
-            <div className="flex items-center gap-1.5">
-              {showSaveInput ? (
-                <>
-                  <input
-                    type="text"
-                    value={saveName}
-                    onChange={(e) => setSaveName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSavePrompt()}
-                    placeholder="Prompt name..."
-                    autoFocus
-                    className="flex-1 bg-bg-input border border-border-subtle rounded-md px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors"
-                  />
-                  <button
-                    onClick={handleSavePrompt}
-                    disabled={!saveName.trim()}
-                    className="px-2 py-1 rounded-md text-[11px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowSaveInput(false);
-                      setSaveName("");
-                    }}
-                    className="px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setShowSaveInput(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
-                >
-                  <Save size={10} />
-                  <span>Save prompt</span>
-                </button>
-              )}
-            </div>
+          {customPrompt.trim() && !showSaveInput && (
+            <button
+              onClick={() => setShowSaveInput(true)}
+              className="p-1 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              title="Save prompt"
+            >
+              <Save size={11} />
+            </button>
+          )}
+          {showSaveInput && (
+            <>
+              <input
+                type="text"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSavePrompt()}
+                placeholder="Name..."
+                autoFocus
+                className="bg-bg-input border border-border-subtle rounded px-2 py-1 text-[11px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/40 transition-colors w-20"
+              />
+              <button
+                onClick={handleSavePrompt}
+                disabled={!saveName.trim()}
+                className="px-1.5 py-1 rounded text-[10px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-40"
+              >
+                Save
+              </button>
+            </>
           )}
         </div>
       )}
 
-      {/* Generate button integrated */}
+      {/* Generate */}
       <button
         onClick={handleGenerate}
         disabled={isGenerating || (isCustomMode && !customPrompt.trim())}
-        className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-all cursor-pointer ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
           isGenerating || (isCustomMode && !customPrompt.trim())
             ? "bg-accent/20 text-accent/40 cursor-not-allowed"
-            : "bg-accent/15 text-accent hover:bg-accent/25 active:scale-[0.98] border border-accent/20"
+            : "bg-accent text-white hover:bg-accent-hover"
         }`}
       >
         {isGenerating ? (
           <>
-            <div className="w-3.5 h-3.5 border-2 border-accent/40 border-t-accent rounded-full animate-spin" />
-            <span>Generating...</span>
+            <div className="w-3 h-3 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
+            <span>Generating</span>
           </>
         ) : (
           <span>Generate Notes</span>

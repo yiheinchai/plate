@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::io::Write;
 use std::path::PathBuf;
 use tracing::info;
 
@@ -52,6 +53,15 @@ impl ModelManager {
         self.model_path(model_name).exists()
     }
 
+    /// Remove any leftover `.part` file from a previous interrupted download.
+    fn cleanup_partial(&self, dest: &PathBuf) {
+        let part_path = dest.with_extension("bin.part");
+        if part_path.exists() {
+            info!("Removing partial download: {}", part_path.display());
+            let _ = std::fs::remove_file(&part_path);
+        }
+    }
+
     /// Get the file path for a model.
     pub fn model_path(&self, model_name: &str) -> PathBuf {
         let filename = if model_name.ends_with(".bin") {
@@ -63,13 +73,17 @@ impl ModelManager {
     }
 
     /// Download a model from Hugging Face. This is a blocking operation.
+    /// Downloads to a `.part` temp file first, then renames on success
+    /// so a partial file from a killed process won't be mistaken for a valid model.
     pub fn download_model(&self, model_name: &str) -> Result<PathBuf> {
         let dest = self.model_path(model_name);
+        self.cleanup_partial(&dest);
         if dest.exists() {
             info!("Model {} already exists at {}", model_name, dest.display());
             return Ok(dest);
         }
 
+        let part_path = dest.with_extension("bin.part");
         let filename = if model_name.ends_with(".bin") {
             model_name.to_string()
         } else {
@@ -98,13 +112,136 @@ impl ModelManager {
         }
 
         let bytes = response.bytes().context("Failed to read model bytes")?;
-        std::fs::write(&dest, &bytes).context("Failed to write model file")?;
+        std::fs::write(&part_path, &bytes).context("Failed to write model file")?;
+        std::fs::rename(&part_path, &dest).context("Failed to finalize model file")?;
 
         info!(
             "Model {} downloaded ({} bytes)",
             model_name,
             bytes.len()
         );
+        Ok(dest)
+    }
+
+    /// Download a model with progress events emitted via Tauri.
+    /// Downloads to a `.part` temp file first, then renames on success.
+    pub fn download_model_with_progress(
+        &self,
+        model_name: &str,
+        app_handle: &tauri::AppHandle,
+    ) -> Result<PathBuf> {
+        use tauri::Emitter;
+
+        let dest = self.model_path(model_name);
+        self.cleanup_partial(&dest);
+        if dest.exists() {
+            info!("Model {} already exists at {}", model_name, dest.display());
+            return Ok(dest);
+        }
+
+        let part_path = dest.with_extension("bin.part");
+        let filename = if model_name.ends_with(".bin") {
+            model_name.to_string()
+        } else {
+            format!("{}.bin", model_name)
+        };
+        let url = format!("{}/{}", HF_MODEL_BASE_URL, filename);
+
+        // Look up expected size from KNOWN_MODELS
+        let expected_size = KNOWN_MODELS
+            .iter()
+            .find(|(name, _)| *name == model_name)
+            .map(|(_, size)| *size)
+            .unwrap_or(0);
+
+        let _ = app_handle.emit(
+            "model-download-progress",
+            serde_json::json!({
+                "model": model_name,
+                "downloaded": 0u64,
+                "total": expected_size,
+                "status": "downloading",
+            }),
+        );
+
+        info!("Downloading model from {} to {}", url, dest.display());
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(600))
+            .build()
+            .context("Failed to build HTTP client")?;
+
+        let mut response = client
+            .get(&url)
+            .send()
+            .context("Failed to download model")?;
+
+        if !response.status().is_success() {
+            let _ = app_handle.emit(
+                "model-download-progress",
+                serde_json::json!({
+                    "model": model_name,
+                    "status": "error",
+                    "error": format!("HTTP {}", response.status()),
+                }),
+            );
+            anyhow::bail!(
+                "Failed to download model {}: HTTP {}",
+                model_name,
+                response.status()
+            );
+        }
+
+        let total = response
+            .content_length()
+            .unwrap_or(expected_size);
+
+        let mut file = std::fs::File::create(&part_path)
+            .context("Failed to create model file")?;
+        let mut downloaded: u64 = 0;
+        let mut buf = [0u8; 65536];
+        let mut last_emit = std::time::Instant::now();
+
+        loop {
+            let n = std::io::Read::read(&mut response, &mut buf)
+                .context("Failed to read from download stream")?;
+            if n == 0 {
+                break;
+            }
+            file.write_all(&buf[..n])
+                .context("Failed to write model data")?;
+            downloaded += n as u64;
+
+            // Emit progress at most every 200ms to avoid flooding
+            if last_emit.elapsed() >= std::time::Duration::from_millis(200) {
+                let _ = app_handle.emit(
+                    "model-download-progress",
+                    serde_json::json!({
+                        "model": model_name,
+                        "downloaded": downloaded,
+                        "total": total,
+                        "status": "downloading",
+                    }),
+                );
+                last_emit = std::time::Instant::now();
+            }
+        }
+
+        file.flush().context("Failed to flush model file")?;
+        drop(file);
+        std::fs::rename(&part_path, &dest).context("Failed to finalize model file")?;
+
+        let _ = app_handle.emit(
+            "model-download-progress",
+            serde_json::json!({
+                "model": model_name,
+                "downloaded": downloaded,
+                "total": total,
+                "status": "complete",
+            }),
+        );
+
+        info!("Model {} downloaded ({} bytes)", model_name, downloaded);
         Ok(dest)
     }
 

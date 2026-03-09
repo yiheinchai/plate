@@ -109,9 +109,12 @@ impl LlmProvider for G4fProvider {
             anyhow::bail!("Free API error ({}): {}", status, body);
         }
 
-        let chat_response: ChatResponse = response
-            .json()
-            .context("Failed to parse API response")?;
+        let body = response.text().context("Failed to read API response body")?;
+
+        info!("Free API raw response: {}", &body[..body.len().min(500)]);
+
+        let chat_response: ChatResponse = serde_json::from_str(&body)
+            .with_context(|| format!("Failed to parse API response: {}", &body[..body.len().min(500)]))?;
 
         let content = chat_response
             .choices
@@ -119,6 +122,12 @@ impl LlmProvider for G4fProvider {
             .filter_map(|c| c.message.content)
             .collect::<Vec<_>>()
             .join("");
+
+        if content.trim().is_empty() {
+            anyhow::bail!(
+                "The AI returned an empty response. The free API (Pollinations) may be overloaded — try again in a moment."
+            );
+        }
 
         let actual_model = chat_response.model.unwrap_or(model);
 

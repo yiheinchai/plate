@@ -39,6 +39,8 @@ pub struct RecordingState {
     pub sample_rate: u32,
     /// Sender half of a watch channel used to signal the recorder to stop.
     pub stop_tx: Option<watch::Sender<bool>>,
+    /// Receiver for when the recorder thread finishes (WAV fully written).
+    pub done_rx: Option<tokio::sync::oneshot::Receiver<()>>,
     /// Accumulated duration in milliseconds (updated periodically).
     pub duration_ms: u64,
 }
@@ -51,6 +53,7 @@ impl Default for RecordingState {
             output_path: None,
             sample_rate: 16000,
             stop_tx: None,
+            done_rx: None,
             duration_ms: 0,
         }
     }

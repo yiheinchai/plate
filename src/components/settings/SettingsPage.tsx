@@ -1,34 +1,26 @@
-import { Save, Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Check } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import ModelProviderConfig from "./ModelProviderConfig";
 import TranscriptionConfig from "./TranscriptionConfig";
 
 export default function SettingsPanel() {
-  const { settings, isLoading, isSaving, error, saveSettings, updateField } =
+  const { settings, isLoading, isSaving, saved, error, updateField } =
     useSettings();
-
-  const handleSave = async () => {
-    try {
-      await saveSettings(settings);
-    } catch {
-      // Error is already set in the hook
-    }
-  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 size={18} className="animate-spin text-text-muted" />
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={16} className="animate-spin text-text-muted" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-          <AlertCircle size={14} className="text-red-400 shrink-0" />
-          <p className="text-[13px] text-red-400">{error}</p>
+        <div className="flex items-center gap-2 px-3 py-2 bg-record/10 border border-record/20 rounded">
+          <AlertCircle size={13} className="text-record shrink-0" />
+          <p className="text-[12px] text-record">{error}</p>
         </div>
       )}
 
@@ -36,20 +28,17 @@ export default function SettingsPanel() {
       <TranscriptionConfig settings={settings} updateField={updateField} />
 
       {/* Audio */}
-      <section className="flex flex-col gap-2.5">
-        <div>
-          <h2 className="text-[13px] font-semibold text-text-secondary uppercase tracking-[0.08em]">Audio</h2>
-          <p className="text-[11px] text-text-muted/60 mt-0.5">Recording quality settings</p>
-        </div>
-        <div className="bg-bg-card/40 rounded-xl border border-border-subtle/40 p-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] text-text-secondary">Sample Rate</span>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Audio</h2>
+        <div className="bg-bg-card border border-border-subtle rounded p-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] text-text-secondary">Sample Rate</span>
             <select
               value={settings.audio_sample_rate}
               onChange={(e) =>
                 updateField("audio_sample_rate", Number(e.target.value))
               }
-              className="bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+              className="bg-bg-input border border-border-subtle rounded px-2 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
             >
               <option value={16000}>16,000 Hz (recommended)</option>
               <option value={44100}>44,100 Hz</option>
@@ -59,29 +48,20 @@ export default function SettingsPanel() {
         </div>
       </section>
 
-      {/* Save */}
-      <div className="flex justify-end pt-1">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-medium transition-all cursor-pointer ${
-            isSaving
-              ? "bg-accent/30 text-white/40 cursor-not-allowed"
-              : "bg-accent text-white hover:bg-accent-hover active:scale-[0.98] shadow-lg shadow-accent/20"
-          }`}
-        >
-          {isSaving ? (
-            <>
-              <Loader2 size={13} className="animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save size={13} />
-              Save Settings
-            </>
-          )}
-        </button>
+      {/* Auto-save status */}
+      <div className="flex justify-end h-5">
+        {isSaving && (
+          <span className="flex items-center gap-1 text-[11px] text-text-muted">
+            <Loader2 size={10} className="animate-spin" />
+            Saving...
+          </span>
+        )}
+        {saved && !isSaving && (
+          <span className="flex items-center gap-1 text-[11px] text-success">
+            <Check size={10} />
+            Saved
+          </span>
+        )}
       </div>
     </div>
   );

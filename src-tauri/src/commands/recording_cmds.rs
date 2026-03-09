@@ -43,12 +43,14 @@ pub async fn start_recording(
     };
 
     let (stop_tx, stop_rx) = watch::channel(false);
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
 
     rec_state.status = RecorderStatus::Recording;
     rec_state.source = Some(audio_source);
     rec_state.output_path = Some(output_path.clone());
     rec_state.sample_rate = sr;
     rec_state.stop_tx = Some(stop_tx);
+    rec_state.done_rx = Some(done_rx);
     rec_state.duration_ms = 0;
 
     // Spawn the recorder on a blocking thread.
@@ -74,6 +76,8 @@ pub async fn start_recording(
             error!("Recorder failed: {}", e);
             let _ = app_handle.emit("recording-error", e.to_string());
         }
+        // Signal that the WAV file is fully written.
+        let _ = done_tx.send(());
         result
     });
 
@@ -113,8 +117,16 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    // Drop the lock before doing DB work.
+    // Take the done_rx so we can wait for the recorder thread to finish.
+    let done_rx = rec_state.done_rx.take();
+
+    // Drop the lock before waiting.
     drop(rec_state);
+
+    // Wait for the recorder thread to finish writing the WAV file.
+    if let Some(rx) = done_rx {
+        let _ = rx.await;
+    }
 
     // Generate a human-readable title.
     let now = chrono::Local::now();
@@ -260,6 +272,26 @@ pub async fn get_recording(state: State<'_, AppState>, id: String) -> Result<Rec
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Rename a recording.
+#[tauri::command]
+pub async fn rename_recording(
+    state: State<'_, AppState>,
+    id: String,
+    title: String,
+) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(recordings::UPDATE_RECORDING_TITLE_SQL, params![id, title])
+            .map_err(|e| format!("Failed to rename recording: {}", e))?;
+        Ok(())
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

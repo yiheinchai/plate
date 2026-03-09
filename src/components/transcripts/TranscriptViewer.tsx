@@ -27,7 +27,7 @@ export default function TranscriptViewer({ transcript }: TranscriptViewerProps) 
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-text-muted">
@@ -35,33 +35,33 @@ export default function TranscriptViewer({ transcript }: TranscriptViewerProps) 
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
         >
-          {copied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+          {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
 
       {/* Segments */}
       {transcript.segments.length > 0 ? (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col">
           {transcript.segments.map((segment) => (
             <div
               key={segment.id}
-              className="group flex gap-2.5 py-1.5 px-2 rounded-lg hover:bg-white/[0.02] transition-colors"
+              className="flex gap-2 py-1 hover:bg-white/[0.02] transition-colors"
             >
-              <span className="shrink-0 flex items-center gap-1 text-[10px] text-text-muted/70 font-mono tabular-nums pt-0.5">
-                <Clock size={9} />
+              <span className="shrink-0 flex items-center gap-0.5 text-[10px] text-text-muted font-mono tabular-nums pt-px">
+                <Clock size={8} />
                 {formatTimestamp(segment.start_ms)}
               </span>
-              <p className="text-[13px] text-text-secondary leading-relaxed">
+              <p className="text-[12px] text-text-secondary leading-relaxed">
                 {segment.text}
               </p>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-[13px] text-text-secondary leading-relaxed">
+        <p className="text-[12px] text-text-secondary leading-relaxed">
           {transcript.full_text}
         </p>
       )}
