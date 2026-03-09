@@ -11,8 +11,10 @@ use crate::state::AppState;
 pub struct SettingsResponse {
     pub llm_auth_mode: String,
     pub llm_session_token: String,
+    pub llm_organization_id: String,
     pub llm_api_key: String,
     pub llm_model: String,
+    pub g4f_url: String,
     pub transcription_engine: String,
     pub whisper_model: String,
     pub openai_api_key: String,
@@ -22,10 +24,12 @@ pub struct SettingsResponse {
 impl Default for SettingsResponse {
     fn default() -> Self {
         Self {
-            llm_auth_mode: "api_key".to_string(),
+            llm_auth_mode: "g4f".to_string(),
             llm_session_token: String::new(),
+            llm_organization_id: String::new(),
             llm_api_key: String::new(),
-            llm_model: "claude-sonnet-4-20250514".to_string(),
+            llm_model: "openai".to_string(),
+            g4f_url: String::new(),
             transcription_engine: "whisper_local".to_string(),
             whisper_model: "ggml-base.en".to_string(),
             openai_api_key: String::new(),
@@ -62,8 +66,10 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
             match key.as_str() {
                 "llm_auth_mode" => response.llm_auth_mode = value,
                 "llm_session_token" => response.llm_session_token = value,
+                "llm_organization_id" => response.llm_organization_id = value,
                 "llm_api_key" => response.llm_api_key = value,
                 "llm_model" => response.llm_model = value,
+                "g4f_url" => response.g4f_url = value,
                 "transcription_engine" => response.transcription_engine = value,
                 "whisper_model" => response.whisper_model = value,
                 "openai_api_key" => response.openai_api_key = value,
@@ -92,8 +98,10 @@ pub async fn update_settings(
     let pairs = vec![
         ("llm_auth_mode", settings.llm_auth_mode.clone()),
         ("llm_session_token", settings.llm_session_token.clone()),
+        ("llm_organization_id", settings.llm_organization_id.clone()),
         ("llm_api_key", settings.llm_api_key.clone()),
         ("llm_model", settings.llm_model.clone()),
+        ("g4f_url", settings.g4f_url.clone()),
         ("transcription_engine", settings.transcription_engine.clone()),
         ("whisper_model", settings.whisper_model.clone()),
         ("openai_api_key", settings.openai_api_key.clone()),
@@ -123,13 +131,25 @@ pub async fn update_settings(
     );
     cache.set("default_whisper_model", &settings.whisper_model);
     // Map llm_auth_mode + keys to the cache fields.
-    if settings.llm_auth_mode == "api_key" {
-        cache.set("anthropic_api_key", &settings.llm_api_key);
-        cache.set("default_llm_provider", "claude_api");
-    } else {
-        cache.set("claude_session_key", &settings.llm_session_token);
-        cache.set("default_llm_provider", "claude_session");
+    match settings.llm_auth_mode.as_str() {
+        "api_key" => {
+            cache.set("default_llm_provider", "claude_api");
+        }
+        "session_token" => {
+            cache.set("default_llm_provider", "claude_session");
+        }
+        "g4f" => {
+            cache.set("default_llm_provider", "g4f");
+            cache.set("g4f_url", &settings.g4f_url);
+        }
+        _ => {
+            cache.set("default_llm_provider", "claude_api");
+        }
     }
+    // Always cache keys (may switch modes later).
+    cache.set("anthropic_api_key", &settings.llm_api_key);
+    cache.set("claude_session_key", &settings.llm_session_token);
+    cache.set("claude_organization_id", &settings.llm_organization_id);
 
     info!("Settings updated");
     Ok(())

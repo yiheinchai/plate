@@ -6,8 +6,10 @@ use serde::{Deserialize, Serialize};
 pub enum LlmProviderType {
     /// Anthropic Messages API (requires API key).
     ClaudeApi,
-    /// Claude.ai session-based access (requires session token).
+    /// Claude.ai session-based access (requires setup token).
     ClaudeSession,
+    /// gpt4free — free, no API key needed.
+    G4f,
 }
 
 impl std::fmt::Display for LlmProviderType {
@@ -15,6 +17,7 @@ impl std::fmt::Display for LlmProviderType {
         match self {
             LlmProviderType::ClaudeApi => write!(f, "claude_api"),
             LlmProviderType::ClaudeSession => write!(f, "claude_session"),
+            LlmProviderType::G4f => write!(f, "g4f"),
         }
     }
 }

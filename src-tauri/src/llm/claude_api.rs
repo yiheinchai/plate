@@ -6,12 +6,21 @@ use super::provider::LlmProvider;
 use super::types::{LlmRequest, LlmResponse};
 
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const API_VERSION: &str = "2023-06-01";
 
-/// Standard Anthropic Messages API provider.
+/// Auth mode for the Anthropic Messages API.
+#[derive(Clone)]
+pub enum AuthMode {
+    /// Standard API key auth (x-api-key header).
+    ApiKey(String),
+    /// OAuth token from `claude setup-token` (Bearer auth + beta header).
+    OAuthToken(String),
+}
+
+/// Anthropic Messages API provider supporting both API key and OAuth token auth.
 pub struct ClaudeApiProvider {
-    api_key: String,
+    auth: AuthMode,
     default_model: String,
 }
 
@@ -51,15 +60,16 @@ struct Usage {
 impl ClaudeApiProvider {
     pub fn new(api_key: String) -> Self {
         Self {
-            api_key,
+            auth: AuthMode::ApiKey(api_key),
             default_model: DEFAULT_MODEL.to_string(),
         }
     }
 
-    pub fn with_model(api_key: String, model: String) -> Self {
+    /// Create a provider using an OAuth token from `claude setup-token`.
+    pub fn with_oauth_token(token: String) -> Self {
         Self {
-            api_key,
-            default_model: model,
+            auth: AuthMode::OAuthToken(token),
+            default_model: DEFAULT_MODEL.to_string(),
         }
     }
 }
@@ -92,11 +102,19 @@ impl LlmProvider for ClaudeApiProvider {
         info!("Sending request to Anthropic API (model: {})", model);
 
         let client = reqwest::blocking::Client::new();
-        let response = client
+        let mut req = client
             .post(ANTHROPIC_API_URL)
-            .header("x-api-key", &self.api_key)
             .header("anthropic-version", API_VERSION)
-            .header("content-type", "application/json")
+            .header("content-type", "application/json");
+
+        req = match &self.auth {
+            AuthMode::ApiKey(key) => req.header("x-api-key", key),
+            AuthMode::OAuthToken(token) => req
+                .header("Authorization", format!("Bearer {}", token))
+                .header("anthropic-beta", "oauth-2025-04-20"),
+        };
+
+        let response = req
             .json(&api_request)
             .send()
             .context("Failed to send request to Anthropic API")?;

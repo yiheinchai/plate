@@ -3,10 +3,12 @@ import * as tauri from "../lib/tauri";
 import type { Settings } from "../lib/types";
 
 const defaultSettings: Settings = {
-  llm_auth_mode: "api_key",
+  llm_auth_mode: "g4f",
   llm_session_token: "",
+  llm_organization_id: "",
   llm_api_key: "",
-  llm_model: "claude-sonnet-4-20250514",
+  llm_model: "openai",
+  g4f_url: "",
   transcription_engine: "whisper_local",
   whisper_model: "base",
   openai_api_key: "",

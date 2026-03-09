@@ -43,14 +43,23 @@ export type AudioSource = "microphone" | "system_audio";
 export type RecordingStatus = "idle" | "recording" | "paused";
 
 export interface Settings {
-  llm_auth_mode: "session_token" | "api_key";
+  llm_auth_mode: "session_token" | "api_key" | "g4f";
   llm_session_token: string;
+  llm_organization_id: string;
   llm_api_key: string;
   llm_model: string;
+  g4f_url: string;
   transcription_engine: "whisper_local" | "whisper_api";
   whisper_model: string;
   openai_api_key: string;
   audio_sample_rate: number;
+}
+
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  prompt_text: string;
+  created_at: string;
 }
 
 export interface AudioLevelPayload {

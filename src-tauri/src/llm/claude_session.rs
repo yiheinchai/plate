@@ -6,7 +6,7 @@ use super::provider::LlmProvider;
 use super::types::{LlmRequest, LlmResponse};
 
 const CLAUDE_AI_BASE: &str = "https://claude.ai/api";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 
 /// Claude.ai session-based provider.
 ///
@@ -47,6 +47,83 @@ impl ClaudeSessionProvider {
             organization_id,
             default_model: DEFAULT_MODEL.to_string(),
         }
+    }
+
+    /// Create a provider by auto-fetching the organization ID from the session token.
+    pub fn from_session_key(session_key: String) -> Result<Self> {
+        let org_id = Self::fetch_organization_id(&session_key)?;
+        Ok(Self {
+            session_key,
+            organization_id: org_id,
+            default_model: DEFAULT_MODEL.to_string(),
+        })
+    }
+
+    /// Fetch the organization ID from claude.ai using the session cookie.
+    /// Picks the first org with "chat" capability (i.e. a Pro/Max/Enterprise account).
+    pub fn fetch_organization_id(session_key: &str) -> Result<String> {
+        use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_str(&format!("sessionKey={}", session_key))
+                .context("Invalid session key")?,
+        );
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            ),
+        );
+
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(headers)
+            .build()
+            .context("Failed to build HTTP client")?;
+
+        let url = format!("{}/organizations", CLAUDE_AI_BASE);
+        let response = client
+            .get(&url)
+            .send()
+            .context("Failed to fetch organizations")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().unwrap_or_default();
+            anyhow::bail!(
+                "Failed to fetch organizations ({}): {}. Is the session token valid?",
+                status,
+                body
+            );
+        }
+
+        let orgs: Vec<serde_json::Value> = response
+            .json()
+            .context("Failed to parse organizations response")?;
+
+        // Find the first org with "chat" capability (Pro/Max/Enterprise).
+        for org in &orgs {
+            if let Some(caps) = org.get("capabilities").and_then(|c| c.as_array()) {
+                let has_chat = caps.iter().any(|c| c.as_str() == Some("chat"));
+                if has_chat {
+                    if let Some(uuid) = org.get("uuid").and_then(|u| u.as_str()) {
+                        info!("Auto-detected organization: {}", uuid);
+                        return Ok(uuid.to_string());
+                    }
+                }
+            }
+        }
+
+        // Fallback: use the first org if none have "chat".
+        if let Some(first) = orgs.first() {
+            if let Some(uuid) = first.get("uuid").and_then(|u| u.as_str()) {
+                info!("Using first organization (no chat capability found): {}", uuid);
+                return Ok(uuid.to_string());
+            }
+        }
+
+        anyhow::bail!("No organizations found for this session token")
     }
 
     /// Build a reqwest client with the session cookie set.

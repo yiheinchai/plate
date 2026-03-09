@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS saved_prompts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    prompt_text TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 "#;
 
 // ----- Row types for reading from the database -----
@@ -111,21 +118,34 @@ pub struct SettingsCache {
     pub default_whisper_model: Option<String>,
     pub default_llm_provider: Option<String>,
     pub default_prompt_style: Option<String>,
+    pub g4f_url: Option<String>,
 }
 
 impl SettingsCache {
     /// Update the cache from a key-value pair.
+    /// Accepts both the canonical cache keys and the frontend DB keys.
     pub fn set(&mut self, key: &str, value: &str) {
         let val = Some(value.to_string());
         match key {
             "openai_api_key" => self.openai_api_key = val,
-            "anthropic_api_key" => self.anthropic_api_key = val,
-            "claude_session_key" => self.claude_session_key = val,
-            "claude_organization_id" => self.claude_organization_id = val,
-            "default_transcription_engine" => self.default_transcription_engine = val,
-            "default_whisper_model" => self.default_whisper_model = val,
+            "anthropic_api_key" | "llm_api_key" => self.anthropic_api_key = val,
+            "claude_session_key" | "llm_session_token" => self.claude_session_key = val,
+            "claude_organization_id" | "llm_organization_id" => self.claude_organization_id = val,
+            "default_transcription_engine" | "transcription_engine" => {
+                self.default_transcription_engine = val
+            }
+            "default_whisper_model" | "whisper_model" => self.default_whisper_model = val,
             "default_llm_provider" => self.default_llm_provider = val,
             "default_prompt_style" => self.default_prompt_style = val,
+            "g4f_url" => self.g4f_url = val,
+            // Map llm_auth_mode to default_llm_provider
+            "llm_auth_mode" => {
+                self.default_llm_provider = Some(match value {
+                    "session_token" => "claude_session".to_string(),
+                    "g4f" => "g4f".to_string(),
+                    _ => "claude_api".to_string(),
+                });
+            }
             _ => {}
         }
     }

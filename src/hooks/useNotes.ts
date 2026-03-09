@@ -8,11 +8,16 @@ export function useNotes() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generateNotes = useCallback(async (transcriptId: string) => {
+  const generateNotes = useCallback(
+    async (
+      transcriptId: string,
+      promptStyle?: string,
+      customPrompt?: string
+    ) => {
     setIsGenerating(true);
     setError(null);
     try {
-      const note = await tauri.generateNotes(transcriptId);
+      const note = await tauri.generateNotes(transcriptId, promptStyle, customPrompt);
       setCurrentNote(note);
       // Refresh list after generation
       const list = await tauri.listNotes();
@@ -20,7 +25,8 @@ export function useNotes() {
       return note;
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : "Failed to generate notes";
+        err instanceof Error ? err.message : String(err);
+      console.error("Generate notes error:", err);
       setError(message);
       throw err;
     } finally {

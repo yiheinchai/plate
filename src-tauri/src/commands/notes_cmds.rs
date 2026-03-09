@@ -15,6 +15,8 @@ use crate::state::AppState;
 pub async fn generate_notes(
     state: State<'_, AppState>,
     transcript_id: String,
+    prompt_style: Option<String>,
+    custom_prompt: Option<String>,
 ) -> Result<NoteRow, String> {
     let db_path = state.db_path.clone();
 
@@ -52,18 +54,25 @@ pub async fn generate_notes(
         .default_llm_provider
         .clone()
         .unwrap_or_else(|| "claude_api".to_string());
-    let prompt_style = settings
-        .default_prompt_style
-        .clone()
+    let prompt_style = prompt_style
+        .or_else(|| settings.default_prompt_style.clone())
         .unwrap_or_else(|| "summary".to_string());
     let api_key = settings.anthropic_api_key.clone();
     let session_key = settings.claude_session_key.clone();
-    let org_id = settings.claude_organization_id.clone();
+    let g4f_url = settings.g4f_url.clone();
     drop(settings);
+
+    info!(
+        "generate_notes: provider={}, session_key={}, api_key={}",
+        llm_provider_str,
+        session_key.as_deref().map(|s| if s.is_empty() { "empty" } else { "set" }).unwrap_or("none"),
+        api_key.as_deref().map(|s| if s.is_empty() { "empty" } else { "set" }).unwrap_or("none"),
+    );
 
     let provider_type = match llm_provider_str.as_str() {
         "claude_api" => LlmProviderType::ClaudeApi,
         "claude_session" => LlmProviderType::ClaudeSession,
+        "g4f" => LlmProviderType::G4f,
         _ => LlmProviderType::ClaudeApi,
     };
 
@@ -71,7 +80,7 @@ pub async fn generate_notes(
         transcript_id: transcript.id.clone(),
         transcript_text: transcript.full_text.clone(),
         prompt_style: prompt_style.clone(),
-        custom_prompt: None,
+        custom_prompt,
         provider: provider_type,
         model: None,
     };
@@ -81,12 +90,12 @@ pub async fn generate_notes(
             &request,
             api_key.as_deref(),
             session_key.as_deref(),
-            org_id.as_deref(),
+            g4f_url.as_deref(),
         )
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("Failed to generate notes: {:#}", e))?;
 
     // Save note to DB.
     let note_id = uuid::Uuid::new_v4().to_string();
@@ -197,6 +206,91 @@ pub async fn delete_note(state: State<'_, AppState>, id: String) -> Result<(), S
             .map_err(|e| format!("Failed to open database: {}", e))?;
         conn.execute(notes::DELETE_NOTE_SQL, params![id])
             .map_err(|e| format!("Failed to delete note: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+// ─── Saved Prompts ───
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedPrompt {
+    pub id: String,
+    pub name: String,
+    pub prompt_text: String,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub async fn list_saved_prompts(state: State<'_, AppState>) -> Result<Vec<SavedPrompt>, String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<Vec<SavedPrompt>, String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT id, name, prompt_text, created_at FROM saved_prompts ORDER BY created_at DESC")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(SavedPrompt {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    prompt_text: row.get(2)?,
+                    created_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query prompts: {}", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to read prompt rows: {}", e))?;
+        Ok(rows)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+pub async fn save_prompt(
+    state: State<'_, AppState>,
+    name: String,
+    prompt_text: String,
+) -> Result<SavedPrompt, String> {
+    let db_path = state.db_path.clone();
+    let id = uuid::Uuid::new_v4().to_string();
+    let created_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    let prompt = SavedPrompt {
+        id: id.clone(),
+        name,
+        prompt_text,
+        created_at,
+    };
+    let p = prompt.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(
+            "INSERT INTO saved_prompts (id, name, prompt_text, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![p.id, p.name, p.prompt_text, p.created_at],
+        )
+        .map_err(|e| format!("Failed to save prompt: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    Ok(prompt)
+}
+
+#[tauri::command]
+pub async fn delete_saved_prompt(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute("DELETE FROM saved_prompts WHERE id = ?1", params![id])
+            .map_err(|e| format!("Failed to delete prompt: {}", e))?;
         Ok(())
     })
     .await

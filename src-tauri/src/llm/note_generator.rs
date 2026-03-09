@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use tracing::info;
 
 use super::claude_api::ClaudeApiProvider;
-use super::claude_session::ClaudeSessionProvider;
+use super::g4f::G4fProvider;
 use super::prompts;
 use super::provider::LlmProvider;
 use super::types::{
@@ -14,23 +14,24 @@ pub fn generate_notes(
     request: &NoteGenerationRequest,
     api_key: Option<&str>,
     session_key: Option<&str>,
-    organization_id: Option<&str>,
+    g4f_url: Option<&str>,
 ) -> Result<NoteGenerationResult> {
-    // Build the provider.
+    // Build the provider. Filter out empty strings.
+    let api_key = api_key.filter(|s| !s.is_empty());
+    let session_key = session_key.filter(|s| !s.is_empty());
+
     let provider: Box<dyn LlmProvider> = match request.provider {
         LlmProviderType::ClaudeApi => {
-            let key = api_key.context("Anthropic API key is required for claude_api provider")?;
+            let key = api_key.context("Anthropic API key is required — set it in Settings")?;
             Box::new(ClaudeApiProvider::new(key.to_string()))
         }
         LlmProviderType::ClaudeSession => {
-            let session = session_key
-                .context("Session key is required for claude_session provider")?;
-            let org = organization_id
-                .context("Organization ID is required for claude_session provider")?;
-            Box::new(ClaudeSessionProvider::new(
-                session.to_string(),
-                org.to_string(),
-            ))
+            let token = session_key
+                .context("Setup token is required — run `claude setup-token` and paste it in Settings")?;
+            Box::new(ClaudeApiProvider::with_oauth_token(token.to_string()))
+        }
+        LlmProviderType::G4f => {
+            Box::new(G4fProvider::new(g4f_url.map(|s| s.to_string())))
         }
     };
 
@@ -59,7 +60,7 @@ pub fn generate_notes(
 
     let response = provider
         .complete(&llm_request)
-        .context("Failed to generate notes")?;
+        .context("LLM completion failed")?;
 
     // Generate a title.
     let (title_system, title_user) = prompts::build_title_prompt(&request.transcript_text);

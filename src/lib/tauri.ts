@@ -5,6 +5,7 @@ import type {
   Transcript,
   Note,
   Settings,
+  SavedPrompt,
   AudioSource,
   AudioLevelPayload,
   TranscriptChunkPayload,
@@ -61,8 +62,31 @@ export async function listTranscripts(
 
 // ─── Notes Commands ───
 
-export async function generateNotes(transcriptId: string): Promise<Note> {
-  return invoke<Note>("generate_notes", { transcriptId });
+export async function generateNotes(
+  transcriptId: string,
+  promptStyle?: string,
+  customPrompt?: string
+): Promise<Note> {
+  return invoke<Note>("generate_notes", {
+    transcriptId,
+    promptStyle,
+    customPrompt,
+  });
+}
+
+export async function listSavedPrompts(): Promise<SavedPrompt[]> {
+  return invoke<SavedPrompt[]>("list_saved_prompts");
+}
+
+export async function savePrompt(
+  name: string,
+  promptText: string
+): Promise<SavedPrompt> {
+  return invoke<SavedPrompt>("save_prompt", { name, promptText });
+}
+
+export async function deleteSavedPrompt(id: string): Promise<void> {
+  return invoke<void>("delete_saved_prompt", { id });
 }
 
 export async function getNote(id: string): Promise<Note> {

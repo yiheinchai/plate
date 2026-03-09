@@ -5,7 +5,7 @@ import * as tauri from "../lib/tauri";
 import type { Recording, Transcript } from "../lib/types";
 import TranscriptList from "../components/transcripts/TranscriptList";
 import TranscriptViewer from "../components/transcripts/TranscriptViewer";
-import GenerateNotesButton from "../components/notes/GenerateNotesButton";
+import PromptPicker from "../components/notes/PromptPicker";
 import { useNotes } from "../hooks/useNotes";
 
 export default function LibraryPage() {
@@ -26,7 +26,7 @@ export default function LibraryPage() {
     setCurrentTranscript,
   } = useTranscript();
 
-  const { isGenerating, generateNotes } = useNotes();
+  const { isGenerating, error: notesError, generateNotes } = useNotes();
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -74,10 +74,13 @@ export default function LibraryPage() {
     }
   };
 
-  const handleGenerateNotes = async () => {
+  const handleGenerateNotes = async (
+    promptStyle: string,
+    customPrompt?: string
+  ) => {
     if (!currentTranscript) return;
     try {
-      await generateNotes(currentTranscript.id);
+      await generateNotes(currentTranscript.id, promptStyle, customPrompt);
     } catch {
       // Error handled in hook
     }
@@ -147,14 +150,25 @@ export default function LibraryPage() {
             style={{ animation: "slide-in 0.2s ease-out" }}
           >
             {/* Panel header */}
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border-subtle/20 shrink-0">
-              <span className="text-sm font-medium text-text-primary truncate">
-                Transcript
-              </span>
-              <GenerateNotesButton
-                onClick={handleGenerateNotes}
-                isGenerating={isGenerating}
-              />
+            <div className="flex flex-col gap-0 border-b border-border-subtle/20 shrink-0">
+              <div className="px-5 py-4">
+                <span className="text-sm font-medium text-text-primary">
+                  Transcript
+                </span>
+              </div>
+              <div className="px-5 pb-4">
+                <PromptPicker
+                  onGenerate={handleGenerateNotes}
+                  isGenerating={isGenerating}
+                />
+              </div>
+              {notesError && (
+                <div className="px-5 pb-3">
+                  <p className="text-[11px] text-red-400 bg-red-400/10 rounded-lg px-3 py-2 break-words">
+                    {notesError}
+                  </p>
+                </div>
+              )}
             </div>
             {/* Panel body */}
             <div className="flex-1 overflow-y-auto px-5 py-4">
