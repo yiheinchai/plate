@@ -53,7 +53,7 @@ pub async fn generate_notes(
     let llm_provider_str = settings
         .default_llm_provider
         .clone()
-        .unwrap_or_else(|| "claude_api".to_string());
+        .unwrap_or_else(|| "g4f".to_string());
     let prompt_style = prompt_style
         .or_else(|| settings.default_prompt_style.clone())
         .unwrap_or_else(|| "summary".to_string());
