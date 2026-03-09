@@ -17,7 +17,11 @@ Plate is a macOS desktop app that records your lectures (in-person or Zoom), tra
 
 Go to [**Releases**](../../releases/latest) and download `Plate.dmg`. Drag to Applications. Done.
 
-> On first launch macOS will warn about an unidentified developer. Right-click the app → **Open** → **Open** to bypass Gatekeeper.
+> **Important:** Since the app isn't code-signed, macOS will say it's "damaged". After dragging to Applications, run this in Terminal:
+> ```
+> xattr -cr /Applications/Plate.app
+> ```
+> Then open normally. You only need to do this once.
 
 ### Build from source
 

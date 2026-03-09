@@ -67,6 +67,11 @@ jobs:
             Download **Plate.dmg** below and drag to Applications.
 
             > Requires macOS 13+ on Apple Silicon (M1/M2/M3/M4).
-            > On first launch, right-click the app → **Open** to bypass Gatekeeper.
+
+            **Important:** The app is not code-signed, so macOS will say it's "damaged". After installing, run this once in Terminal:
+            ```
+            xattr -cr /Applications/Plate.app
+            ```
+            Then open normally.
           releaseDraft: false
           prerelease: false
