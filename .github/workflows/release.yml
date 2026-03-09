@@ -11,7 +11,16 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            target: aarch64-apple-darwin
+            arch: aarch64
+          - runner: macos-13
+            target: x86_64-apple-darwin
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +32,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -34,32 +41,24 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri app (Apple Silicon)
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+          CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Plate ${{ github.ref_name }}"
           releaseBody: |
-            Download **Plate.dmg** below and drag to Applications.
+            Download the `.dmg` for your Mac below and drag Plate to Applications.
 
-            > Requires macOS 13+. On first launch, right-click → Open to bypass Gatekeeper.
+            | File | Mac type |
+            |---|---|
+            | `Plate_*_aarch64.dmg` | Apple Silicon (M1/M2/M3/M4) |
+            | `Plate_*_x64.dmg` | Intel |
+
+            > Requires macOS 13+. On first launch, right-click the app → **Open** to bypass Gatekeeper.
           releaseDraft: false
           prerelease: false
-          args: --target aarch64-apple-darwin
-
-      - name: Build Tauri app (Intel)
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Plate ${{ github.ref_name }}"
-          releaseBody: |
-            Download **Plate.dmg** below and drag to Applications.
-
-            > Requires macOS 13+. On first launch, right-click → Open to bypass Gatekeeper.
-          releaseDraft: false
-          prerelease: false
-          args: --target x86_64-apple-darwin
+          args: --target ${{ matrix.target }}
