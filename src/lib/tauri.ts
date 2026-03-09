@@ -1,0 +1,114 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type {
+  Recording,
+  Transcript,
+  Note,
+  Settings,
+  AudioSource,
+  AudioLevelPayload,
+  TranscriptChunkPayload,
+  RecordingCompletePayload,
+} from "./types";
+
+// ─── Recording Commands ───
+
+export async function startRecording(source: AudioSource): Promise<string> {
+  return invoke<string>("start_recording", { source });
+}
+
+export async function stopRecording(): Promise<Recording> {
+  return invoke<Recording>("stop_recording");
+}
+
+export async function pauseRecording(): Promise<void> {
+  return invoke<void>("pause_recording");
+}
+
+export async function resumeRecording(): Promise<void> {
+  return invoke<void>("resume_recording");
+}
+
+export async function listRecordings(): Promise<Recording[]> {
+  return invoke<Recording[]>("list_recordings");
+}
+
+export async function getRecording(id: string): Promise<Recording> {
+  return invoke<Recording>("get_recording", { id });
+}
+
+export async function deleteRecording(id: string): Promise<void> {
+  return invoke<void>("delete_recording", { id });
+}
+
+// ─── Transcript Commands ───
+
+export async function transcribeRecording(
+  recordingId: string
+): Promise<Transcript> {
+  return invoke<Transcript>("transcribe_recording", { recordingId });
+}
+
+export async function getTranscript(id: string): Promise<Transcript> {
+  return invoke<Transcript>("get_transcript", { id });
+}
+
+export async function listTranscripts(
+  recordingId?: string
+): Promise<Transcript[]> {
+  return invoke<Transcript[]>("list_transcripts", { recordingId });
+}
+
+// ─── Notes Commands ───
+
+export async function generateNotes(transcriptId: string): Promise<Note> {
+  return invoke<Note>("generate_notes", { transcriptId });
+}
+
+export async function getNote(id: string): Promise<Note> {
+  return invoke<Note>("get_note", { id });
+}
+
+export async function listNotes(): Promise<Note[]> {
+  return invoke<Note[]>("list_notes");
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  return invoke<void>("delete_note", { id });
+}
+
+// ─── Settings Commands ───
+
+export async function getSettings(): Promise<Settings> {
+  return invoke<Settings>("get_settings");
+}
+
+export async function updateSettings(settings: Settings): Promise<void> {
+  return invoke<void>("update_settings", { settings });
+}
+
+// ─── Event Listeners ───
+
+export function onAudioLevel(
+  callback: (level: number) => void
+): Promise<UnlistenFn> {
+  return listen<AudioLevelPayload>("audio-level", (event) => {
+    callback(event.payload.level);
+  });
+}
+
+export function onTranscriptChunk(
+  callback: (text: string, isFinal: boolean) => void
+): Promise<UnlistenFn> {
+  return listen<TranscriptChunkPayload>("transcript-chunk", (event) => {
+    callback(event.payload.text, event.payload.is_final);
+  });
+}
+
+export function onRecordingComplete(
+  callback: (recording: Recording) => void
+): Promise<UnlistenFn> {
+  return listen<RecordingCompletePayload>("recording-complete", (event) => {
+    callback(event.payload.recording);
+  });
+}
