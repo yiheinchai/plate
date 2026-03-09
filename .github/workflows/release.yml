@@ -11,16 +11,7 @@ permissions:
 
 jobs:
   build-macos:
-    strategy:
-      matrix:
-        include:
-          - runner: macos-latest
-            target: aarch64-apple-darwin
-            arch: aarch64
-          - runner: macos-13
-            target: x86_64-apple-darwin
-            arch: x86_64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -51,14 +42,9 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Plate ${{ github.ref_name }}"
           releaseBody: |
-            Download the `.dmg` for your Mac below and drag Plate to Applications.
+            Download **Plate.dmg** below and drag to Applications.
 
-            | File | Mac type |
-            |---|---|
-            | `Plate_*_aarch64.dmg` | Apple Silicon (M1/M2/M3/M4) |
-            | `Plate_*_x64.dmg` | Intel |
-
-            > Requires macOS 13+. On first launch, right-click the app → **Open** to bypass Gatekeeper.
+            > Requires macOS 13+ on Apple Silicon (M1/M2/M3/M4).
+            > On first launch, right-click the app → **Open** to bypass Gatekeeper.
           releaseDraft: false
           prerelease: false
-          args: --target ${{ matrix.target }}
