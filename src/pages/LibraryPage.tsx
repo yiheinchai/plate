@@ -88,43 +88,43 @@ export default function LibraryPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-4 h-full min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <h1 className="text-lg font-semibold text-text-primary tracking-tight">Library</h1>
         <button
           onClick={loadData}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
           title="Refresh"
         >
-          <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-          Refresh
+          <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+          <span>Refresh</span>
         </button>
       </div>
 
       {/* Search bar */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+          size={15}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
         />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search recordings..."
-          className="w-full bg-bg-card/50 border border-border-subtle/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/50 transition-colors"
+          className="w-full bg-bg-card/50 border border-border-subtle/50 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted/40 outline-none focus:border-accent/40 transition-colors"
         />
       </div>
 
-      {/* Content */}
-      <div className="flex gap-6 flex-1 min-h-0">
+      {/* Content — two-column layout */}
+      <div className="flex gap-5 flex-1 min-h-0 min-w-0">
         {/* Recording list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className={`overflow-y-auto min-w-0 ${currentTranscript ? "w-1/2 shrink-0" : "flex-1"}`}>
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <RefreshCw
-                size={24}
+                size={20}
                 className="animate-spin text-text-muted"
               />
             </div>
@@ -142,17 +142,24 @@ export default function LibraryPage() {
 
         {/* Transcript viewer panel */}
         {currentTranscript && (
-          <div className="w-[400px] shrink-0 bg-bg-card/50 rounded-2xl border border-border-subtle/50 p-5 overflow-y-auto flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-text-primary">
-                Full Transcript
+          <div
+            className="w-1/2 min-w-0 shrink-0 bg-bg-card/30 rounded-2xl border border-border-subtle/30 overflow-hidden flex flex-col"
+            style={{ animation: "slide-in 0.2s ease-out" }}
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border-subtle/20 shrink-0">
+              <span className="text-sm font-medium text-text-primary truncate">
+                Transcript
               </span>
               <GenerateNotesButton
                 onClick={handleGenerateNotes}
                 isGenerating={isGenerating}
               />
             </div>
-            <TranscriptViewer transcript={currentTranscript} />
+            {/* Panel body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <TranscriptViewer transcript={currentTranscript} />
+            </div>
           </div>
         )}
       </div>

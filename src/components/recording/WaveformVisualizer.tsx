@@ -21,7 +21,7 @@ export default function WaveformVisualizer() {
   }, [audioLevel, isActive]);
 
   return (
-    <div className="flex items-center justify-center gap-[2px] h-16">
+    <div className="flex items-center justify-center gap-[2px] h-14">
       {bars.map((height, i) => {
         const center = BAR_COUNT / 2;
         const distFromCenter = Math.abs(i - center) / center;
@@ -32,7 +32,7 @@ export default function WaveformVisualizer() {
             className="rounded-full transition-all duration-100 ease-out"
             style={{
               width: "2.5px",
-              height: `${Math.max(3, height * 56)}px`,
+              height: `${Math.max(3, height * 48)}px`,
               background: isActive
                 ? `linear-gradient(to top, rgba(99, 102, 241, ${0.4 + height * 0.6}), rgba(139, 92, 246, ${0.3 + height * 0.7}))`
                 : `rgba(63, 63, 70, ${0.2 + (1 - distFromCenter) * 0.2})`,

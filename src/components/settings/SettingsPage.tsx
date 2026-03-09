@@ -18,17 +18,17 @@ export default function SettingsPanel() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 size={20} className="animate-spin text-text-muted" />
+        <Loader2 size={18} className="animate-spin text-text-muted" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {error && (
-        <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20">
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
           <AlertCircle size={14} className="text-red-400 shrink-0" />
-          <p className="text-sm text-red-400">{error}</p>
+          <p className="text-[13px] text-red-400">{error}</p>
         </div>
       )}
 
@@ -36,17 +36,20 @@ export default function SettingsPanel() {
       <TranscriptionConfig settings={settings} updateField={updateField} />
 
       {/* Audio */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-[13px] font-semibold text-text-secondary uppercase tracking-[0.08em]">Audio</h2>
-        <div className="bg-bg-card/50 rounded-2xl border border-border-subtle/50 p-5">
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-text-secondary">Sample Rate</span>
+      <section className="flex flex-col gap-2.5">
+        <div>
+          <h2 className="text-[13px] font-semibold text-text-secondary uppercase tracking-[0.08em]">Audio</h2>
+          <p className="text-[11px] text-text-muted/60 mt-0.5">Recording quality settings</p>
+        </div>
+        <div className="bg-bg-card/40 rounded-xl border border-border-subtle/40 p-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-text-secondary">Sample Rate</span>
             <select
               value={settings.audio_sample_rate}
               onChange={(e) =>
                 updateField("audio_sample_rate", Number(e.target.value))
               }
-              className="bg-bg-input border border-border-subtle rounded-xl px-3.5 py-2.5 text-sm text-text-primary outline-none focus:border-accent/50 transition-colors"
+              className="bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary outline-none focus:border-accent/40 transition-colors"
             >
               <option value={16000}>16,000 Hz (recommended)</option>
               <option value={44100}>44,100 Hz</option>
@@ -57,11 +60,11 @@ export default function SettingsPanel() {
       </section>
 
       {/* Save */}
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-end pt-1">
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-[13px] font-medium transition-all cursor-pointer ${
             isSaving
               ? "bg-accent/30 text-white/40 cursor-not-allowed"
               : "bg-accent text-white hover:bg-accent-hover active:scale-[0.98] shadow-lg shadow-accent/20"
@@ -69,12 +72,12 @@ export default function SettingsPanel() {
         >
           {isSaving ? (
             <>
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={13} className="animate-spin" />
               Saving...
             </>
           ) : (
             <>
-              <Save size={14} />
+              <Save size={13} />
               Save Settings
             </>
           )}

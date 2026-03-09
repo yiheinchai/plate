@@ -27,46 +27,41 @@ export default function TranscriptViewer({ transcript }: TranscriptViewerProps) 
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-text-muted font-medium uppercase tracking-wider">
-            Transcript
-          </span>
-          <span className="text-xs text-text-muted">
-            ({transcript.segments.length} segments)
-          </span>
-        </div>
+        <span className="text-[11px] text-text-muted">
+          {transcript.segments.length} segments
+        </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
         >
-          {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
-          {copied ? "Copied" : "Copy all"}
+          {copied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
 
       {/* Segments */}
       {transcript.segments.length > 0 ? (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           {transcript.segments.map((segment) => (
             <div
               key={segment.id}
-              className="group flex gap-3 py-2 px-3 rounded-lg hover:bg-white/[0.03] transition-colors"
+              className="group flex gap-2.5 py-1.5 px-2 rounded-lg hover:bg-white/[0.02] transition-colors"
             >
-              <span className="shrink-0 flex items-center gap-1 text-[11px] text-text-muted font-mono tabular-nums pt-0.5">
-                <Clock size={10} />
+              <span className="shrink-0 flex items-center gap-1 text-[10px] text-text-muted/70 font-mono tabular-nums pt-0.5">
+                <Clock size={9} />
                 {formatTimestamp(segment.start_ms)}
               </span>
-              <p className="text-sm text-text-secondary leading-relaxed">
+              <p className="text-[13px] text-text-secondary leading-relaxed">
                 {segment.text}
               </p>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-sm text-text-secondary leading-relaxed">
+        <p className="text-[13px] text-text-secondary leading-relaxed">
           {transcript.full_text}
         </p>
       )}

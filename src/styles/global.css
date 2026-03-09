@@ -23,8 +23,6 @@
 }
 
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
@@ -39,7 +37,8 @@ body,
 body {
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -82,16 +81,22 @@ button {
 
 /* Animations */
 @keyframes pulse-record {
-  0%, 100% {
-    box-shadow: 0 0 0 0 var(--color-record-glow), 0 0 20px var(--color-record-glow);
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 var(--color-record-glow),
+      0 0 20px var(--color-record-glow);
   }
   50% {
-    box-shadow: 0 0 0 16px transparent, 0 0 40px var(--color-record-glow);
+    box-shadow:
+      0 0 0 16px transparent,
+      0 0 40px var(--color-record-glow);
   }
 }
 
 @keyframes ring-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.15;
   }
@@ -102,11 +107,32 @@ button {
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }

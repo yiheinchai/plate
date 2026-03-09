@@ -21,36 +21,42 @@ export function useRecording() {
 
   // Listen for audio level events
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
 
     tauri.onAudioLevel((level) => {
+      if (cancelled) return;
       setAudioLevel(level);
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) { fn(); } else { unlisten = fn; }
     });
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [setAudioLevel]);
 
   // Listen for recording-error events (recorder thread failed after start_recording returned)
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
 
     import("@tauri-apps/api/event").then(({ listen }) => {
       listen<string>("recording-error", (event) => {
+        if (cancelled) return;
         console.error("Recording failed:", event.payload);
         setRecordingStatus("idle");
         setCurrentRecordingId(null);
         setRecordingStartTime(null);
         setAudioLevel(0);
       }).then((fn) => {
-        unlisten = fn;
+        if (cancelled) { fn(); } else { unlisten = fn; }
       });
     });
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, [setRecordingStatus, setCurrentRecordingId, setRecordingStartTime, setAudioLevel]);

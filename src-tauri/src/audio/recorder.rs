@@ -59,6 +59,7 @@ impl Recorder {
                 let stream = microphone::start_capture(
                     &device,
                     &stream_config,
+                    self.sample_rate,
                     producer,
                     stop_rx.clone(),
                     Some(self.app_handle.clone()),

@@ -21,12 +21,12 @@ export default function Sidebar() {
   const { recordingStatus } = useAppStore();
 
   return (
-    <aside className="flex flex-col items-center w-[68px] h-full bg-bg-sidebar border-r border-border-subtle">
+    <aside className="flex flex-col items-center w-[72px] h-full bg-bg-sidebar border-r border-border-subtle/60">
       {/* Drag region for macOS title bar */}
-      <div className="h-12 w-full shrink-0" data-tauri-drag-region />
+      <div className="h-11 w-full shrink-0" data-tauri-drag-region />
 
       {/* Navigation */}
-      <nav className="flex flex-col items-center gap-1 px-2 flex-1">
+      <nav className="flex flex-col items-center gap-1.5 px-2 pt-1 flex-1">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           const isRecord = item.path === "/";
@@ -36,7 +36,7 @@ export default function Sidebar() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`relative flex flex-col items-center justify-center w-11 h-11 rounded-xl text-sm transition-all duration-150 cursor-pointer group ${
+              className={`relative flex flex-col items-center justify-center w-14 h-12 rounded-xl text-sm transition-all duration-150 cursor-pointer gap-0.5 ${
                 isActive
                   ? "bg-white/[0.08] text-text-primary"
                   : "text-text-muted hover:bg-white/[0.04] hover:text-text-secondary"
@@ -45,7 +45,7 @@ export default function Sidebar() {
             >
               {/* Active indicator bar */}
               {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 bg-accent rounded-r-full" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-5 bg-accent rounded-r-full" />
               )}
 
               <span className="relative">
@@ -56,8 +56,9 @@ export default function Sidebar() {
                 )}
               </span>
 
-              {/* Tooltip */}
-              <span className="absolute left-full ml-3 px-2.5 py-1 bg-bg-elevated text-text-primary text-xs font-medium rounded-md border border-border-subtle shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+              <span className={`text-[9px] font-medium leading-none ${
+                isActive ? "text-text-secondary" : "text-text-muted"
+              }`}>
                 {item.label}
               </span>
             </button>

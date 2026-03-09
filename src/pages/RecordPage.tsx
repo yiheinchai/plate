@@ -44,26 +44,28 @@ export default function RecordPage() {
   const displayText = transcriptText || liveText;
 
   return (
-    <div className="flex flex-col items-center h-full max-w-xl mx-auto">
-      {/* Top section: centered controls */}
-      <div className="flex flex-col items-center justify-center flex-1 gap-10 pt-4">
+    <div className="flex flex-col h-full">
+      {/* Controls area — vertically centered */}
+      <div className="flex flex-col items-center justify-center flex-1 gap-8 min-h-0">
         <AudioSourcePicker />
         <RecordingControls
           onStop={handleStop}
           onStart={handleNewRecording}
         />
-        <div className="w-full px-4">
+        <div className="w-full max-w-sm px-4">
           <WaveformVisualizer />
         </div>
       </div>
 
-      {/* Bottom section: transcript */}
-      <div className="w-full pb-2 shrink-0">
-        <LiveTranscript
-          text={displayText}
-          isRecording={isRecording}
-          isTranscribing={isTranscribing}
-        />
+      {/* Transcript area */}
+      <div className="w-full shrink-0 px-2 pb-2">
+        <div className="max-w-2xl mx-auto">
+          <LiveTranscript
+            text={displayText}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+          />
+        </div>
       </div>
     </div>
   );

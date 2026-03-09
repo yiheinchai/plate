@@ -93,22 +93,19 @@ impl LiveTranscriber {
 
         info!("Live transcriber started with model {}", model_name);
 
-        let mut all_samples: Vec<f32> = Vec::new();
-        let mut last_transcribed_len: usize = 0;
+        let mut pending_samples: Vec<f32> = Vec::new();
         let busy = Arc::new(AtomicBool::new(false));
-        // Track the cumulative text so we only emit new text.
-        let mut prev_text = String::new();
 
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(50)) {
                 Ok(LiveMsg::Samples(samples)) => {
-                    all_samples.extend_from_slice(&samples);
+                    pending_samples.extend_from_slice(&samples);
                 }
                 Ok(LiveMsg::Stop) => {
                     info!("Live transcriber stopping");
                     // Do one final transcription of any remaining audio.
-                    if all_samples.len() > last_transcribed_len {
-                        if let Some(text) = Self::transcribe_chunk(&ctx, &all_samples) {
+                    if !pending_samples.is_empty() {
+                        if let Some(text) = Self::transcribe_chunk(&ctx, &pending_samples) {
                             if !text.is_empty() {
                                 let _ = app_handle.emit(
                                     "transcript-chunk",
@@ -128,42 +125,23 @@ impl LiveTranscriber {
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
 
-            // Check if we have enough new audio to run inference.
-            let new_samples = all_samples.len() - last_transcribed_len;
-            if new_samples >= CHUNK_INTERVAL_SAMPLES && !busy.load(Ordering::Relaxed) {
+            // Transcribe only new audio — no re-transcription of old chunks.
+            if pending_samples.len() >= CHUNK_INTERVAL_SAMPLES && !busy.load(Ordering::Relaxed) {
                 busy.store(true, Ordering::Relaxed);
-                last_transcribed_len = all_samples.len();
 
-                // Run inference on all accumulated audio for context coherence.
-                // For long recordings, limit to the last ~30 seconds to keep it fast.
-                let max_context = 16000 * 30; // 30 seconds
-                let start = if all_samples.len() > max_context {
-                    all_samples.len() - max_context
-                } else {
-                    0
-                };
-                let audio_slice = all_samples[start..].to_vec();
+                // Take the pending samples and transcribe just this chunk.
+                let chunk: Vec<f32> = pending_samples.drain(..).collect();
 
-                if let Some(text) = Self::transcribe_chunk(&ctx, &audio_slice) {
-                    // Emit only the new portion of text.
-                    let new_text = if text.len() > prev_text.len()
-                        && text.starts_with(&prev_text)
-                    {
-                        text[prev_text.len()..].trim_start().to_string()
-                    } else {
-                        text.clone()
-                    };
-
-                    if !new_text.is_empty() {
+                if let Some(text) = Self::transcribe_chunk(&ctx, &chunk) {
+                    if !text.is_empty() {
                         let _ = app_handle.emit(
                             "transcript-chunk",
                             serde_json::json!({
-                                "text": new_text,
+                                "text": text,
                                 "is_final": true,
                             }),
                         );
                     }
-                    prev_text = text;
                 }
 
                 busy.store(false, Ordering::Relaxed);

@@ -15,21 +15,21 @@ export default function GenerateNotesButton({
     <button
       onClick={onClick}
       disabled={disabled || isGenerating}
-      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium transition-all cursor-pointer shrink-0 ${
         disabled || isGenerating
-          ? "bg-accent/30 text-white/40 cursor-not-allowed"
-          : "bg-accent text-white hover:bg-accent-hover active:scale-[0.98]"
+          ? "bg-accent/20 text-accent/40 cursor-not-allowed"
+          : "bg-accent/15 text-accent hover:bg-accent/25 active:scale-[0.97] border border-accent/20"
       }`}
     >
       {isGenerating ? (
         <>
-          <Loader2 size={16} className="animate-spin" />
-          Generating notes...
+          <Loader2 size={14} className="animate-spin" />
+          <span>Generating...</span>
         </>
       ) : (
         <>
-          <Sparkles size={16} />
-          Generate Notes
+          <Sparkles size={14} />
+          <span>Generate Notes</span>
         </>
       )}
     </button>

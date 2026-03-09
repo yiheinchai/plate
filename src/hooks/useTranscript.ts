@@ -11,12 +11,16 @@ export function useTranscript() {
   const [liveText, setLiveText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Listen for live transcript chunks
+  // Listen for live transcript chunks.
+  // Use a cancelled flag to handle React Strict Mode double-mounting,
+  // which can cause the async listener to register after cleanup runs.
   const liveTextRef = useRef("");
   useEffect(() => {
+    let cancelled = false;
     let unlisten: (() => void) | null = null;
 
     tauri.onTranscriptChunk((text, isFinal) => {
+      if (cancelled) return;
       if (isFinal) {
         liveTextRef.current += text + " ";
         setLiveText(liveTextRef.current);
@@ -24,10 +28,15 @@ export function useTranscript() {
         setLiveText(liveTextRef.current + text);
       }
     }).then((fn) => {
-      unlisten = fn;
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
     });
 
     return () => {
+      cancelled = true;
       unlisten?.();
     };
   }, []);
