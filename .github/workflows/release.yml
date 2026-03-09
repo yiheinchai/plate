@@ -32,12 +32,34 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Fetch Rust dependencies
+        run: cd src-tauri && cargo fetch
+
+      - name: Patch whisper-rs-sys to disable native CPU detection
+        run: |
+          # The CI runner's M1 doesn't support i8mm but whisper.cpp's cmake
+          # detects it incorrectly via -mcpu=native. Patch the build script
+          # to forward GGML_* env vars as cmake defines too.
+          WHISPER_BUILD_RS=$(find ~/.cargo/registry/src -path "*/whisper-rs-sys-*/build.rs" 2>/dev/null | head -1)
+          if [ -z "$WHISPER_BUILD_RS" ]; then
+            echo "ERROR: whisper-rs-sys build.rs not found after cargo fetch!"
+            find ~/.cargo/registry/src -name "build.rs" | head -20
+            exit 1
+          fi
+          echo "Before patch:"
+          grep 'starts_with("CMAKE_")' "$WHISPER_BUILD_RS"
+          sed -i '' 's/key.starts_with("CMAKE_")/key.starts_with("CMAKE_") || key.starts_with("GGML_")/' "$WHISPER_BUILD_RS"
+          echo "After patch:"
+          grep 'starts_with("CMAKE_")\|starts_with("GGML_")' "$WHISPER_BUILD_RS"
+          echo "Patched: $WHISPER_BUILD_RS"
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MACOSX_DEPLOYMENT_TARGET: "13.0"
           CMAKE_OSX_DEPLOYMENT_TARGET: "13.0"
+          GGML_NATIVE: "OFF"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Plate ${{ github.ref_name }}"
