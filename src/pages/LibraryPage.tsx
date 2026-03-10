@@ -441,6 +441,66 @@ export default function LibraryPage() {
     setPlaybackSpeed(1);
   }, [selectedId]);
 
+  // Keyboard shortcuts for audio playback.
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!selectedId || !audioRef.current) return;
+
+      // Space: play/pause (only on library page, not record page)
+      if (e.code === "Space") {
+        e.preventDefault();
+        togglePlayback();
+        return;
+      }
+
+      // Left arrow: skip back 5s
+      if (e.code === "ArrowLeft" && audioReady) {
+        e.preventDefault();
+        const t = Math.max(0, audioRef.current.currentTime - 5);
+        audioRef.current.currentTime = t;
+        setPlaybackTime(t);
+        return;
+      }
+
+      // Right arrow: skip forward 5s
+      if (e.code === "ArrowRight" && audioReady) {
+        e.preventDefault();
+        const t = Math.min(playbackDuration, audioRef.current.currentTime + 5);
+        audioRef.current.currentTime = t;
+        setPlaybackTime(t);
+        return;
+      }
+
+      // [ key: slower playback
+      if (e.code === "BracketLeft") {
+        e.preventDefault();
+        const idx = SPEED_OPTIONS.indexOf(playbackSpeed);
+        if (idx > 0) {
+          const next = SPEED_OPTIONS[idx - 1];
+          setPlaybackSpeed(next);
+          if (audioRef.current) audioRef.current.playbackRate = next;
+        }
+        return;
+      }
+
+      // ] key: faster playback
+      if (e.code === "BracketRight") {
+        e.preventDefault();
+        const idx = SPEED_OPTIONS.indexOf(playbackSpeed);
+        if (idx < SPEED_OPTIONS.length - 1) {
+          const next = SPEED_OPTIONS[idx + 1];
+          setPlaybackSpeed(next);
+          if (audioRef.current) audioRef.current.playbackRate = next;
+        }
+        return;
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [selectedId, audioReady, playbackDuration, playbackSpeed, togglePlayback]);
+
   // Drag-and-drop audio import via Tauri native events.
   useEffect(() => {
     let unlisten: (() => void) | null = null;
