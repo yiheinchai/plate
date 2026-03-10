@@ -73,6 +73,16 @@ export function useTranscript() {
     try {
       const transcript = await tauri.transcribeRecording(recordingId);
       setCurrentTranscript(transcript);
+      // Notify when transcription completes (useful for long recordings).
+      try {
+        const { sendNotification, isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
+        let permitted = await isPermissionGranted();
+        if (!permitted) permitted = (await requestPermission()) === "granted";
+        if (permitted) {
+          const preview = transcript.full_text.slice(0, 80).trim();
+          sendNotification({ title: "Transcription complete", body: preview || "Ready to review" });
+        }
+      } catch { /* notification not critical */ }
       return transcript;
     } catch (err) {
       const message =

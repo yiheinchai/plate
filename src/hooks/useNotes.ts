@@ -22,6 +22,15 @@ export function useNotes() {
       // Refresh list after generation
       const list = await tauri.listNotes();
       setNotes(list);
+      // Notify when notes are ready.
+      try {
+        const { sendNotification, isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
+        let permitted = await isPermissionGranted();
+        if (!permitted) permitted = (await requestPermission()) === "granted";
+        if (permitted) {
+          sendNotification({ title: "Notes generated", body: note.title || "Ready to review" });
+        }
+      } catch { /* notification not critical */ }
       return note;
     } catch (err) {
       const message =
