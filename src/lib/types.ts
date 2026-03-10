@@ -64,6 +64,15 @@ export interface SavedPrompt {
   created_at: string;
 }
 
+export interface SearchResult {
+  kind: "recording" | "transcript" | "note";
+  recording_id: string;
+  recording_title: string;
+  snippet: string;
+  note_title: string | null;
+  note_id: string | null;
+}
+
 export interface AudioLevelPayload {
   level: number;
 }

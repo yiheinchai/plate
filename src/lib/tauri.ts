@@ -13,6 +13,7 @@ import type {
   ModelDownloadProgressPayload,
   TranscriptionProgressPayload,
   WhisperModelInfo,
+  SearchResult,
 } from "./types";
 
 // ─── Recording Commands ───
@@ -115,6 +116,12 @@ export async function listNotes(transcriptId?: string): Promise<Note[]> {
 
 export async function deleteNote(id: string): Promise<void> {
   return invoke<void>("delete_note", { id });
+}
+
+// ─── Search Commands ───
+
+export async function search(query: string): Promise<SearchResult[]> {
+  return invoke<SearchResult[]>("search", { query });
 }
 
 // ─── Settings Commands ───

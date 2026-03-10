@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
-import type { Recording, Transcript, Note } from "../lib/types";
+import type { Recording, Transcript, Note, SearchResult } from "../lib/types";
 import TranscriptViewer from "../components/transcripts/TranscriptViewer";
 import PromptPicker from "../components/notes/PromptPicker";
 import NoteViewer from "../components/notes/NoteViewer";
@@ -65,6 +65,10 @@ export default function LibraryPage() {
   const location = useLocation();
   const navState = location.state as { selectRecordingId?: string; autoTranscribe?: boolean } | null;
   const handledNavState = useRef<string | null>(null);
+
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
@@ -281,9 +285,31 @@ export default function LibraryPage() {
     setPlaybackDuration(0);
   }, [selectedId]);
 
-  const filteredRecordings = recordings.filter((r) =>
-    r.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Debounced full-text search across transcripts and notes.
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (searchQuery.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    searchTimerRef.current = setTimeout(() => {
+      tauri.search(searchQuery.trim()).then((results) => {
+        setSearchResults(results);
+        setIsSearching(false);
+      }).catch(() => setIsSearching(false));
+    }, 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchQuery]);
+
+  const filteredRecordings = searchQuery.trim().length < 2
+    ? recordings
+    : recordings.filter((r) =>
+        r.title.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+  const hasDeepResults = searchResults.some((r) => r.kind !== "recording");
 
   const selectedRecording = recordings.find((r) => r.id === selectedId);
 
@@ -340,6 +366,51 @@ export default function LibraryPage() {
             </div>
           ) : (
             <div className="flex flex-col">
+              {/* Deep search results (transcript/note matches) */}
+              {hasDeepResults && (
+                <div className="border-b border-border-subtle">
+                  <div className="px-3 py-1.5 text-[10px] text-text-muted uppercase tracking-wider">
+                    Found in transcripts & notes
+                  </div>
+                  {searchResults
+                    .filter((r) => r.kind !== "recording")
+                    .map((result, i) => (
+                      <button
+                        key={`${result.kind}-${result.recording_id}-${i}`}
+                        onClick={() => {
+                          const rec = recordings.find((r) => r.id === result.recording_id);
+                          if (rec) {
+                            handleSelect(rec);
+                            if (result.kind === "note") {
+                              setDetailTab("notes");
+                            } else {
+                              setDetailTab("transcript");
+                            }
+                          }
+                        }}
+                        className="w-full flex flex-col gap-0.5 px-3 py-2 text-left hover:bg-white/[0.03] transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-medium text-accent uppercase">
+                            {result.kind === "note" ? "Note" : "Transcript"}
+                          </span>
+                          <span className="text-[10px] text-text-muted truncate">
+                            {result.recording_title}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-text-secondary line-clamp-2">
+                          {result.snippet}
+                        </p>
+                      </button>
+                    ))}
+                </div>
+              )}
+              {isSearching && (
+                <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-text-muted">
+                  <div className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
+                  Searching...
+                </div>
+              )}
               {filteredRecordings.map((recording) => {
                 const isSelected = selectedId === recording.id;
                 const hasTranscript = transcriptMap.has(recording.id);
