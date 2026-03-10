@@ -42,6 +42,30 @@ function isAutoTitle(title: string): boolean {
   return /^Recording \d{4}-\d{2}-\d{2}/.test(title);
 }
 
+function getDateGroup(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const recDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.floor((today.getTime() - recDay.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return "This Week";
+  if (diffDays < 30) return "This Month";
+  return "Earlier";
+}
+
+function groupRecordingsByDate(recordings: Recording[]): { label: string; recordings: Recording[] }[] {
+  const order = ["Today", "Yesterday", "This Week", "This Month", "Earlier"];
+  const groups = new Map<string, Recording[]>();
+  for (const rec of recordings) {
+    const label = getDateGroup(rec.created_at);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(rec);
+  }
+  return order.filter((l) => groups.has(l)).map((l) => ({ label: l, recordings: groups.get(l)! }));
+}
+
 export default function LibraryPage() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [transcriptMap, setTranscriptMap] = useState<Map<string, Transcript>>(new Map());
@@ -517,64 +541,76 @@ export default function LibraryPage() {
                   Searching...
                 </div>
               )}
-              {filteredRecordings.map((recording) => {
-                const isSelected = selectedId === recording.id;
-                const hasTranscript = transcriptMap.has(recording.id);
-                const duration = formatDuration(recording.duration_ms);
-                const isMic = recording.source_type === "microphone";
+              {(searchQuery.trim().length >= 2
+                ? [{ label: "", recordings: filteredRecordings }]
+                : groupRecordingsByDate(filteredRecordings)
+              ).map((group) => (
+                <div key={group.label}>
+                  {group.label && (
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-text-muted/70 uppercase tracking-wider bg-bg-primary/50 border-b border-border-subtle sticky top-0 z-10">
+                      {group.label}
+                    </div>
+                  )}
+                  {group.recordings.map((recording) => {
+                    const isSelected = selectedId === recording.id;
+                    const hasTranscript = transcriptMap.has(recording.id);
+                    const duration = formatDuration(recording.duration_ms);
+                    const isMic = recording.source_type === "microphone";
 
-                return (
-                  <button
-                    key={recording.id}
-                    onClick={() => handleSelect(recording)}
-                    className={`group w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer ${
-                      isSelected
-                        ? "bg-accent/15 text-text-primary"
-                        : "hover:bg-white/[0.03] text-text-secondary"
-                    }`}
-                  >
-                    <div className="shrink-0">
-                      {recording.source_type === "imported" ? (
-                        <Upload size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
-                      ) : isMic ? (
-                        <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
-                      ) : (
-                        <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-medium truncate">
-                        {recording.title}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {duration && (
-                          <span className="text-[10px] text-text-muted flex items-center gap-0.5">
-                            <Clock size={8} />
-                            {duration}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-text-muted">
-                          {formatDate(recording.created_at)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {hasTranscript && (
-                        <span className="text-[9px] font-medium text-success">
-                          T
-                        </span>
-                      )}
+                    return (
                       <button
-                        onClick={(e) => handleDeleteRecording(recording.id, e)}
-                        className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
-                        title="Delete"
+                        key={recording.id}
+                        onClick={() => handleSelect(recording)}
+                        className={`group w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-accent/15 text-text-primary"
+                            : "hover:bg-white/[0.03] text-text-secondary"
+                        }`}
                       >
-                        <Trash2 size={11} />
+                        <div className="shrink-0">
+                          {recording.source_type === "imported" ? (
+                            <Upload size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                          ) : isMic ? (
+                            <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                          ) : (
+                            <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] font-medium truncate">
+                            {recording.title}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {duration && (
+                              <span className="text-[10px] text-text-muted flex items-center gap-0.5">
+                                <Clock size={8} />
+                                {duration}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-text-muted">
+                              {formatDate(recording.created_at)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {hasTranscript && (
+                            <span className="text-[9px] font-medium text-success">
+                              T
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => handleDeleteRecording(recording.id, e)}
+                            className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
                       </button>
-                    </div>
-                  </button>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>
