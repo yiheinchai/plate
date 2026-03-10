@@ -33,31 +33,31 @@ export default function TranscriptionConfig({
   const selectedDownloaded = downloadedSet.has(settings.whisper_model);
 
   return (
-    <section className="flex flex-col gap-2.5">
-      <h2 className="text-[10px] font-semibold text-text-muted/40 uppercase tracking-[0.15em]">
+    <section className="flex flex-col gap-2">
+      <h2 className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
         Transcription
       </h2>
-      <div className="bg-white/[0.02] border border-border-subtle rounded-xl p-4 flex flex-col gap-4">
+      <div className="bg-bg-card border border-border-subtle rounded p-3 flex flex-col gap-3">
         {/* Engine toggle */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           <span className="text-[12px] text-text-secondary">Engine</span>
-          <div className="flex rounded-lg border border-border-subtle bg-white/[0.02] p-0.5">
+          <div className="flex bg-bg-primary rounded border border-border-subtle">
             <button
               onClick={() => updateField("transcription_engine", "whisper_local")}
-              className={`flex-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-200 cursor-pointer ${
+              className={`flex-1 px-2.5 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
                 settings.transcription_engine === "whisper_local"
-                  ? "bg-accent/15 text-accent shadow-sm"
-                  : "text-text-muted/60 hover:text-text-secondary"
+                  ? "bg-accent/15 text-accent"
+                  : "text-text-muted hover:text-text-secondary"
               }`}
             >
               Local (Whisper)
             </button>
             <button
               onClick={() => updateField("transcription_engine", "whisper_api")}
-              className={`flex-1 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all duration-200 cursor-pointer ${
+              className={`flex-1 px-2.5 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
                 settings.transcription_engine === "whisper_api"
-                  ? "bg-accent/15 text-accent shadow-sm"
-                  : "text-text-muted/60 hover:text-text-secondary"
+                  ? "bg-accent/15 text-accent"
+                  : "text-text-muted hover:text-text-secondary"
               }`}
             >
               OpenAI API
@@ -67,12 +67,12 @@ export default function TranscriptionConfig({
 
         {/* Local Whisper model */}
         {settings.transcription_engine === "whisper_local" && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1">
             <span className="text-[12px] text-text-secondary">Whisper Model</span>
             <select
               value={settings.whisper_model}
               onChange={(e) => updateField("whisper_model", e.target.value)}
-              className="bg-white/[0.04] border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent/30 transition-all"
+              className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -82,12 +82,12 @@ export default function TranscriptionConfig({
             </select>
             <div className="flex items-center gap-1.5 mt-0.5">
               {selectedDownloaded ? (
-                <span className="flex items-center gap-1 text-[10px] text-success/60">
+                <span className="flex items-center gap-1 text-[10px] text-success">
                   <Check size={9} />
                   Downloaded
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] text-text-muted/40">
+                <span className="flex items-center gap-1 text-[10px] text-text-muted">
                   <Download size={9} />
                   Will download on first transcription
                 </span>
@@ -98,7 +98,7 @@ export default function TranscriptionConfig({
 
         {/* OpenAI API key */}
         {settings.transcription_engine === "whisper_api" && (
-          <label className="flex flex-col gap-1.5">
+          <label className="flex flex-col gap-1">
             <span className="text-[12px] text-text-secondary">OpenAI API Key</span>
             <div className="relative">
               <input
@@ -106,14 +106,14 @@ export default function TranscriptionConfig({
                 value={settings.openai_api_key}
                 onChange={(e) => updateField("openai_api_key", e.target.value)}
                 placeholder="sk-..."
-                className="w-full bg-white/[0.04] border border-border-subtle rounded-lg px-3 py-2 pr-9 text-[12px] text-text-primary placeholder:text-text-muted/30 outline-none focus:border-accent/30 transition-all font-mono"
+                className="w-full bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 pr-8 text-[12px] text-text-primary placeholder:text-text-muted/50 outline-none focus:border-accent/40 transition-colors font-mono"
               />
               <button
                 type="button"
                 onClick={() => setShowOpenAIKey(!showOpenAIKey)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted/40 hover:text-text-secondary cursor-pointer transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary cursor-pointer transition-colors"
               >
-                {showOpenAIKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showOpenAIKey ? <EyeOff size={12} /> : <Eye size={12} />}
               </button>
             </div>
           </label>

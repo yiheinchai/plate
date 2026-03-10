@@ -49,66 +49,24 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
   };
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center gap-5">
       {/* Timer */}
       <div
-        className={`text-5xl font-extralight tabular-nums tracking-tight font-mono transition-all duration-300 ${
-          isIdle ? "text-text-muted/40" : "text-text-primary"
+        className={`text-4xl font-light tabular-nums tracking-wide font-mono transition-colors ${
+          isIdle ? "text-text-muted" : "text-text-primary"
         }`}
       >
         {formatTime(elapsedMs)}
       </div>
 
-      {/* Main record button — sits in center of waveform ring */}
-      <div className="relative flex items-center justify-center">
-        {/* Pulse rings when recording */}
-        {isRecording && (
-          <>
-            <span
-              className="absolute w-16 h-16 rounded-full border border-record/30"
-              style={{ animation: "pulse-ring 2s ease-out infinite" }}
-            />
-            <span
-              className="absolute w-16 h-16 rounded-full border border-record/20"
-              style={{ animation: "pulse-ring 2s ease-out infinite 0.6s" }}
-            />
-          </>
-        )}
-
-        <button
-          onClick={handleMainButton}
-          className={`relative flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 cursor-pointer ${
-            isIdle
-              ? "bg-gradient-to-br from-record to-red-600 hover:from-record-hover hover:to-red-500 shadow-lg shadow-record/20 hover:shadow-record/40 hover:scale-105"
-              : "bg-gradient-to-br from-record to-red-700 shadow-lg shadow-record/30"
-          }`}
-          style={
-            isRecording
-              ? { animation: "pulse-record 2.5s ease-in-out infinite" }
-              : {}
-          }
-          title={isIdle ? "Start recording" : "Stop recording"}
-        >
-          {isIdle ? (
-            <span className="w-5 h-5 rounded-full bg-white/90" />
-          ) : (
-            <Square
-              size={18}
-              className="text-white/90"
-              fill="rgba(255,255,255,0.9)"
-              strokeWidth={0}
-            />
-          )}
-        </button>
-      </div>
-
-      {/* Secondary controls */}
-      <div className="flex items-center gap-3">
+      {/* Buttons */}
+      <div className="flex items-center gap-4">
+        {/* Pause/resume */}
         {!isIdle && (
           <button
             onClick={handlePauseResume}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] transition-all duration-200 cursor-pointer"
-            style={{ animation: "fade-in-scale 0.2s ease-out" }}
+            className="flex items-center justify-center w-9 h-9 rounded bg-bg-card border border-border-subtle hover:bg-bg-card-hover transition-colors cursor-pointer"
+            style={{ animation: "fade-in 0.15s ease-out" }}
             title={isRecording ? "Pause" : "Resume"}
           >
             {isRecording ? (
@@ -118,10 +76,40 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
             )}
           </button>
         )}
+
+        {/* Main record/stop button */}
+        <button
+          onClick={handleMainButton}
+          className={`relative flex items-center justify-center w-14 h-14 rounded-full transition-all cursor-pointer ${
+            isIdle
+              ? "bg-record hover:bg-record-hover"
+              : "bg-record hover:bg-record-hover"
+          }`}
+          style={
+            isRecording
+              ? { animation: "pulse-record 2s ease-in-out infinite" }
+              : {}
+          }
+          title={isIdle ? "Start recording" : "Stop recording"}
+        >
+          {isIdle ? (
+            <span className="w-4 h-4 rounded-full bg-white/90" />
+          ) : (
+            <Square
+              size={16}
+              className="text-white/90"
+              fill="rgba(255,255,255,0.9)"
+              strokeWidth={0}
+            />
+          )}
+        </button>
+
+        {/* Spacer for symmetry */}
+        {!isIdle && <div className="w-9" />}
       </div>
 
       {/* Status */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {isRecording && (
           <span className="w-1.5 h-1.5 rounded-full bg-record animate-pulse" />
         )}
@@ -129,11 +117,11 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
           <span className="w-1.5 h-1.5 rounded-full bg-warning" />
         )}
         <span
-          className={`text-[11px] font-medium uppercase tracking-[0.15em] transition-colors ${
-            isIdle ? "text-text-muted/40" : isRecording ? "text-record/80" : "text-warning/80"
+          className={`text-[11px] font-medium uppercase tracking-widest ${
+            isIdle ? "text-text-muted" : isRecording ? "text-record" : "text-warning"
           }`}
         >
-          {isIdle && "Ready to record"}
+          {isIdle && "Ready"}
           {isRecording && "Recording"}
           {isPaused && "Paused"}
         </span>

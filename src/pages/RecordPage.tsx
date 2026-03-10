@@ -17,6 +17,7 @@ export default function RecordPage() {
   const handleStop = async () => {
     try {
       const recording = await stopRecording();
+      // Navigate to Library immediately — transcription happens there
       navigate("/library", {
         state: { selectRecordingId: recording.id, autoTranscribe: true },
       });
@@ -31,17 +32,12 @@ export default function RecordPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Controls — centered with waveform */}
-      <div className="flex flex-col items-center justify-center flex-1 gap-2 min-h-0">
+      {/* Controls — centered */}
+      <div className="flex flex-col items-center justify-center flex-1 gap-6 min-h-0">
         <AudioSourcePicker />
-
-        {/* Waveform ring with controls overlaid */}
-        <div className="relative flex items-center justify-center">
+        <RecordingControls onStop={handleStop} onStart={handleNewRecording} />
+        <div className="w-full max-w-xs">
           <WaveformVisualizer />
-          {/* Record button sits inside the ring */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <RecordingControls onStop={handleStop} onStart={handleNewRecording} />
-          </div>
         </div>
       </div>
 
