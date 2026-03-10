@@ -56,6 +56,7 @@ export interface Settings {
   default_prompt_style: string;
   default_custom_prompt: string;
   auto_transcribe: boolean;
+  auto_generate_notes: boolean;
 }
 
 export interface SavedPrompt {

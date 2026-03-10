@@ -159,6 +159,27 @@ export default function LibraryPage() {
       if (recording && isAutoTitle(recording.title) && transcript.full_text.length > 20) {
         autoRenameRecording(recordingId, transcript.full_text);
       }
+      // Auto-generate notes if enabled (use transcript directly, not state)
+      if (settings.auto_generate_notes && transcript) {
+        try {
+          const promptStyle = settings.default_prompt_style || "summary";
+          const customPrompt = settings.default_custom_prompt || undefined;
+          const note = await generateNotes(transcript.id, promptStyle, customPrompt);
+          const notes = await tauri.listNotes(transcript.id);
+          setRecordingNotes(notes);
+          setDetailTab("notes");
+          // Auto-rename from note title if still auto-titled
+          const rec = recordings.find((r) => r.id === recordingId);
+          if (rec && isAutoTitle(rec.title) && note.title) {
+            try {
+              await tauri.renameRecording(rec.id, note.title);
+              setRecordings((prev) =>
+                prev.map((r) => r.id === rec.id ? { ...r, title: note.title } : r)
+              );
+            } catch { /* non-critical */ }
+          }
+        } catch { /* note generation error handled in hook */ }
+      }
     } catch {
       // Error handled in hook
     }

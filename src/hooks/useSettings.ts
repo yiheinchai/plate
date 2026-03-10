@@ -16,6 +16,7 @@ const defaultSettings: Settings = {
   default_prompt_style: "summary",
   default_custom_prompt: "",
   auto_transcribe: false,
+  auto_generate_notes: false,
 };
 
 export function useSettings() {

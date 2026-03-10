@@ -22,6 +22,7 @@ pub struct SettingsResponse {
     pub default_prompt_style: String,
     pub default_custom_prompt: String,
     pub auto_transcribe: bool,
+    pub auto_generate_notes: bool,
 }
 
 impl Default for SettingsResponse {
@@ -40,6 +41,7 @@ impl Default for SettingsResponse {
             default_prompt_style: "summary".to_string(),
             default_custom_prompt: String::new(),
             auto_transcribe: false,
+            auto_generate_notes: false,
         }
     }
 }
@@ -85,6 +87,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
                 "default_prompt_style" => response.default_prompt_style = value,
                 "default_custom_prompt" => response.default_custom_prompt = value,
                 "auto_transcribe" => response.auto_transcribe = value == "true",
+                "auto_generate_notes" => response.auto_generate_notes = value == "true",
                 _ => {}
             }
         }
@@ -118,6 +121,7 @@ pub async fn update_settings(
         ("default_prompt_style", settings.default_prompt_style.clone()),
         ("default_custom_prompt", settings.default_custom_prompt.clone()),
         ("auto_transcribe", settings.auto_transcribe.to_string()),
+        ("auto_generate_notes", settings.auto_generate_notes.to_string()),
     ];
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
@@ -165,6 +169,7 @@ pub async fn update_settings(
     cache.set("default_prompt_style", &settings.default_prompt_style);
     cache.set("default_custom_prompt", &settings.default_custom_prompt);
     cache.set("auto_transcribe", &settings.auto_transcribe.to_string());
+    cache.set("auto_generate_notes", &settings.auto_generate_notes.to_string());
 
     info!("Settings updated");
     Ok(())

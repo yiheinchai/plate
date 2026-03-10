@@ -58,6 +58,26 @@ export default function TranscriptionConfig({
           </button>
         </div>
 
+        {/* Auto-generate notes toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[12px] text-text-secondary">Auto-generate notes</span>
+            <span className="text-[10px] text-text-muted">Generate notes automatically after transcription</span>
+          </div>
+          <button
+            onClick={() => updateField("auto_generate_notes", !settings.auto_generate_notes)}
+            className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer ${
+              settings.auto_generate_notes ? "bg-accent" : "bg-white/15"
+            }`}
+          >
+            <div
+              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
+                settings.auto_generate_notes ? "translate-x-[16px]" : "translate-x-[2px]"
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Engine toggle */}
         <div className="flex flex-col gap-1">
           <span className="text-[12px] text-text-secondary">Engine</span>
