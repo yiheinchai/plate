@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult } from "../lib/types";
@@ -81,6 +81,7 @@ export default function LibraryPage() {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -330,6 +331,41 @@ export default function LibraryPage() {
     setPlaybackSpeed(1);
   }, [selectedId]);
 
+  // Drag-and-drop audio import via Tauri native events.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const AUDIO_EXTS = [".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac"];
+    (async () => {
+      const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+      unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
+        if (event.payload.type === "enter" || event.payload.type === "over") {
+          setIsDragOver(true);
+        } else if (event.payload.type === "leave") {
+          setIsDragOver(false);
+        } else if (event.payload.type === "drop") {
+          setIsDragOver(false);
+          const audioFiles = event.payload.paths.filter((p) =>
+            AUDIO_EXTS.some((ext) => p.toLowerCase().endsWith(ext))
+          );
+          for (const filePath of audioFiles) {
+            try {
+              const recording = await tauri.importAudio(filePath);
+              setRecordings((prev) => [recording, ...prev]);
+              if (audioFiles.length === 1) {
+                setSelectedId(recording.id);
+                setCurrentTranscript(null);
+                setDetailTab("transcript");
+              }
+            } catch (err) {
+              console.error("Drop import failed:", err);
+            }
+          }
+        }
+      });
+    })();
+    return () => { unlisten?.(); };
+  }, []);
+
   // Debounced full-text search across transcripts and notes.
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -368,7 +404,15 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0">
+    <div className="relative flex flex-col h-full min-w-0">
+      {/* Drag-and-drop overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary/90 border-2 border-dashed border-accent rounded-lg pointer-events-none">
+          <FileAudio size={36} className="text-accent mb-2 opacity-80" />
+          <p className="text-[13px] font-medium text-accent">Drop audio files to import</p>
+          <p className="text-[11px] text-text-muted mt-0.5">WAV, MP3, M4A, OGG, FLAC, AAC</p>
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle shrink-0 bg-bg-card">
         <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Library</span>
