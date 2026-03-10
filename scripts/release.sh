@@ -137,7 +137,8 @@ gh release delete "$TAG" --yes 2>/dev/null || true
 git tag -d "$TAG" 2>/dev/null || true
 git push origin ":refs/tags/$TAG" 2>/dev/null || true
 
-# Create tag and release
+# Push commits and tag
+git push origin main
 git tag "$TAG"
 git push origin "$TAG"
 
