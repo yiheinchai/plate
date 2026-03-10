@@ -103,8 +103,12 @@ export default function LibraryPage() {
   const [audioReady, setAudioReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => {
+    const saved = localStorage.getItem("plate-playback-speed");
+    const parsed = saved ? parseFloat(saved) : 1;
+    return SPEED_OPTIONS.includes(parsed) ? parsed : 1;
+  });
   const [isDragOver, setIsDragOver] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
@@ -537,8 +541,13 @@ export default function LibraryPage() {
     setAudioLoading(false);
     setPlaybackTime(0);
     setPlaybackDuration(0);
-    setPlaybackSpeed(1);
   }, [selectedId]);
+
+  // Persist playback speed preference.
+  useEffect(() => {
+    localStorage.setItem("plate-playback-speed", String(playbackSpeed));
+    if (audioRef.current) audioRef.current.playbackRate = playbackSpeed;
+  }, [playbackSpeed]);
 
   // Keyboard shortcuts for audio playback.
   useEffect(() => {
