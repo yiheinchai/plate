@@ -388,6 +388,46 @@ export default function LibraryPage() {
                   {currentTranscript ? (
                     <div className="px-4 py-3">
                       <TranscriptViewer transcript={currentTranscript} />
+                      {/* Re-transcribe button */}
+                      <div className="mt-3 pt-3 border-t border-border-subtle">
+                        <button
+                          onClick={() => handleTranscribe(selectedRecording.id)}
+                          disabled={isTranscribing}
+                          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                            isTranscribing
+                              ? "bg-white/5 text-text-muted cursor-not-allowed"
+                              : "bg-white/5 text-text-muted hover:text-text-secondary hover:bg-white/10"
+                          }`}
+                        >
+                          {isTranscribing ? (
+                            <span className="flex items-center gap-1.5">
+                              <div className="w-2.5 h-2.5 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
+                              {downloadProgress ? "Downloading model..." : "Transcribing..."}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <RefreshCw size={10} />
+                              Re-transcribe with current model
+                            </span>
+                          )}
+                        </button>
+                        {downloadProgress && downloadProgress.total && downloadProgress.total > 0 && (
+                          <div className="flex flex-col items-start gap-1 mt-2">
+                            <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-accent rounded-full transition-all duration-200"
+                                style={{
+                                  width: `${Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <p className="text-[10px] text-text-muted">
+                              Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
+                              {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 gap-2">
@@ -444,6 +484,9 @@ export default function LibraryPage() {
                           : "Transcribe first, then generate notes"}
                       </p>
                     </div>
+                  ) : recordingNotes.length === 1 ? (
+                    /* Single note: show content directly */
+                    <NoteViewer note={recordingNotes[0]} />
                   ) : (
                     <div className="flex flex-col">
                       {recordingNotes.map((note) => (

@@ -21,6 +21,9 @@
     "react-dom": "^19.1.0",
     "react-markdown": "^9",
     "react-router-dom": "^7",
+    "react-syntax-highlighter": "^16.1.1",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5"
   },
@@ -30,6 +33,7 @@
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.6.0",
     "react-grab": "^0.1.27",
     "sharp": "^0.34.5",
