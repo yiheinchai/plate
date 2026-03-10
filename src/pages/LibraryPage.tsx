@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -110,6 +110,9 @@ export default function LibraryPage() {
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
+  const lastClickedIdRef = useRef<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -305,6 +308,87 @@ export default function LibraryPage() {
     }
   };
 
+  // Multi-select: Cmd+click toggles, Shift+click selects range.
+  const handleRecordingClick = (recording: Recording, e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      // Toggle individual selection
+      setMultiSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(recording.id)) {
+          next.delete(recording.id);
+        } else {
+          next.add(recording.id);
+        }
+        return next;
+      });
+      lastClickedIdRef.current = recording.id;
+      return;
+    }
+    if (e.shiftKey && lastClickedIdRef.current) {
+      // Range select
+      const ids = filteredRecordings.map((r) => r.id);
+      const startIdx = ids.indexOf(lastClickedIdRef.current);
+      const endIdx = ids.indexOf(recording.id);
+      if (startIdx !== -1 && endIdx !== -1) {
+        const [lo, hi] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+        setMultiSelected((prev) => {
+          const next = new Set(prev);
+          for (let i = lo; i <= hi; i++) next.add(ids[i]);
+          return next;
+        });
+      }
+      return;
+    }
+    // Normal click: clear multi-select and do regular select
+    if (multiSelected.size > 0) {
+      setMultiSelected(new Set());
+    }
+    lastClickedIdRef.current = recording.id;
+    handleSelect(recording);
+  };
+
+  const handleBulkDelete = async () => {
+    if (multiSelected.size === 0 || bulkDeleting) return;
+    setBulkDeleting(true);
+    const ids = [...multiSelected];
+    for (const id of ids) {
+      try {
+        await tauri.deleteRecording(id);
+      } catch (err) {
+        console.error("Failed to delete recording:", id, err);
+      }
+    }
+    setRecordings((prev) => prev.filter((r) => !multiSelected.has(r.id)));
+    if (selectedId && multiSelected.has(selectedId)) {
+      setSelectedId(null);
+      setCurrentTranscript(null);
+      setViewingNote(null);
+    }
+    setMultiSelected(new Set());
+    setBulkDeleting(false);
+  };
+
+  const handleBulkTranscribe = async () => {
+    const toTranscribe = [...multiSelected].filter((id) => !transcriptMap.has(id));
+    if (toTranscribe.length === 0) return;
+    setBatchProgress({ current: 0, total: toTranscribe.length });
+    for (let i = 0; i < toTranscribe.length; i++) {
+      setBatchProgress({ current: i + 1, total: toTranscribe.length });
+      try {
+        const transcript = await transcribeRecording(toTranscribe[i]);
+        setTranscriptMap((prev) => {
+          const next = new Map(prev);
+          next.set(toTranscribe[i], transcript);
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to transcribe:", toTranscribe[i], err);
+      }
+    }
+    setBatchProgress(null);
+    setMultiSelected(new Set());
+  };
+
   // Save playback position to DB (debounced).
   const positionSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savePosition = useCallback((recId: string, timeMs: number) => {
@@ -455,11 +539,18 @@ export default function LibraryPage() {
         return;
       }
 
-      // Escape: close shortcuts overlay
-      if (e.code === "Escape" && showShortcuts) {
-        e.preventDefault();
-        setShowShortcuts(false);
-        return;
+      // Escape: close shortcuts overlay or clear multi-select
+      if (e.code === "Escape") {
+        if (showShortcuts) {
+          e.preventDefault();
+          setShowShortcuts(false);
+          return;
+        }
+        if (multiSelected.size > 0) {
+          e.preventDefault();
+          setMultiSelected(new Set());
+          return;
+        }
       }
 
       if (!selectedId || !audioRef.current) return;
@@ -515,7 +606,7 @@ export default function LibraryPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [selectedId, audioReady, playbackDuration, playbackSpeed, togglePlayback, showShortcuts]);
+  }, [selectedId, audioReady, playbackDuration, playbackSpeed, togglePlayback, showShortcuts, multiSelected]);
 
   // Drag-and-drop audio import via Tauri native events.
   useEffect(() => {
@@ -654,10 +745,19 @@ export default function LibraryPage() {
                 </div>
               </div>
               <div className="border-t border-border-subtle pt-3">
-                <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">General</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-text-secondary">Show this help</span>
-                  <kbd className="text-[10px] font-mono bg-bg-primary border border-border-subtle rounded px-1.5 py-0.5 text-text-muted min-w-[28px] text-center">?</kbd>
+                <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">Library</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    ["\u2318+Click", "Toggle multi-select"],
+                    ["\u21e7+Click", "Range select"],
+                    ["Esc", "Clear selection"],
+                    ["?", "Show this help"],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-[11px] text-text-secondary">{desc}</span>
+                      <kbd className="text-[10px] font-mono bg-bg-primary border border-border-subtle rounded px-1.5 py-0.5 text-text-muted min-w-[28px] text-center">{key}</kbd>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -812,6 +912,7 @@ export default function LibraryPage() {
                   )}
                   {group.recordings.map((recording) => {
                     const isSelected = selectedId === recording.id;
+                    const isMultiSelected = multiSelected.has(recording.id);
                     const hasTranscript = transcriptMap.has(recording.id);
                     const duration = formatDuration(recording.duration_ms);
                     const isMic = recording.source_type === "microphone";
@@ -819,13 +920,24 @@ export default function LibraryPage() {
                     return (
                       <button
                         key={recording.id}
-                        onClick={() => handleSelect(recording)}
+                        onClick={(e) => handleRecordingClick(recording, e)}
                         className={`group w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer ${
-                          isSelected
+                          isMultiSelected
+                            ? "bg-accent/20 text-text-primary"
+                            : isSelected
                             ? "bg-accent/15 text-text-primary"
                             : "hover:bg-white/[0.03] text-text-secondary"
                         }`}
                       >
+                        {multiSelected.size > 0 ? (
+                          <div className={`shrink-0 w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                            isMultiSelected
+                              ? "bg-accent border-accent text-white"
+                              : "border-border-subtle"
+                          }`}>
+                            {isMultiSelected && <Check size={10} />}
+                          </div>
+                        ) : (
                         <div className="shrink-0">
                           {recording.source_type === "imported" ? (
                             <Upload size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
@@ -835,6 +947,7 @@ export default function LibraryPage() {
                             <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
                           )}
                         </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="text-[12px] font-medium truncate">
                             {recording.title}
@@ -886,6 +999,40 @@ export default function LibraryPage() {
                   })}
                 </div>
               ))}
+            </div>
+          )}
+          {/* Bulk action bar */}
+          {multiSelected.size > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 border-t border-border-subtle bg-bg-card shrink-0">
+              <span className="text-[11px] font-medium text-text-primary">
+                {multiSelected.size} selected
+              </span>
+              <div className="flex-1" />
+              <button
+                onClick={handleBulkTranscribe}
+                disabled={!!batchProgress || isTranscribing}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-text-muted hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-40"
+                title="Transcribe selected"
+              >
+                <Zap size={10} />
+                Transcribe
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-text-muted hover:text-record hover:bg-record/10 transition-colors cursor-pointer disabled:opacity-40"
+                title="Delete selected"
+              >
+                <Trash2 size={10} />
+                Delete
+              </button>
+              <button
+                onClick={() => setMultiSelected(new Set())}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+                title="Clear selection"
+              >
+                <X size={10} />
+              </button>
             </div>
           )}
         </div>
