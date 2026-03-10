@@ -1,5 +1,5 @@
-import { Clock, Copy, Check, Pencil } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { Clock, Copy, Check, Pencil, Search, ChevronUp, ChevronDown, X } from "lucide-react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Transcript } from "../../lib/types";
 import * as tauri from "../../lib/tauri";
 
@@ -26,12 +26,64 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
   const [segments, setSegments] = useState(transcript.segments);
   const editRef = useRef<HTMLTextAreaElement | null>(null);
   const activeRef = useRef<HTMLDivElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+  const matchRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Sync segments when transcript changes.
   useEffect(() => {
     setSegments(transcript.segments);
     setEditingId(null);
+    setSearchQuery("");
+    setSearchOpen(false);
   }, [transcript.id]);
+
+  // Compute search matches: list of { segmentId, matchIndex } for each occurrence.
+  const searchMatches = useMemo(() => {
+    if (!searchQuery || searchQuery.length < 2) return [];
+    const query = searchQuery.toLowerCase();
+    const matches: { segmentId: number; key: string }[] = [];
+    for (const seg of segments) {
+      const text = seg.text.toLowerCase();
+      let start = 0;
+      let idx: number;
+      let matchNum = 0;
+      while ((idx = text.indexOf(query, start)) !== -1) {
+        matches.push({ segmentId: seg.id, key: `${seg.id}-${matchNum}` });
+        start = idx + 1;
+        matchNum++;
+      }
+    }
+    return matches;
+  }, [segments, searchQuery]);
+
+  // Reset match index when matches change.
+  useEffect(() => {
+    setCurrentMatchIdx(0);
+  }, [searchMatches.length]);
+
+  // Scroll to current match.
+  useEffect(() => {
+    if (searchMatches.length > 0) {
+      const match = searchMatches[currentMatchIdx];
+      if (match) {
+        const el = matchRefs.current.get(match.key);
+        el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, [currentMatchIdx, searchMatches]);
+
+  const goToNextMatch = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setCurrentMatchIdx((prev) => (prev + 1) % searchMatches.length);
+  }, [searchMatches.length]);
+
+  const goToPrevMatch = useCallback(() => {
+    if (searchMatches.length === 0) return;
+    setCurrentMatchIdx((prev) => (prev - 1 + searchMatches.length) % searchMatches.length);
+  }, [searchMatches.length]);
 
   const handleCopy = async () => {
     try {
@@ -90,6 +142,36 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
     }
   }, [activeSegmentId]);
 
+  /** Render segment text with search highlights. */
+  const renderHighlightedText = (text: string, segmentId: number) => {
+    if (!searchQuery || searchQuery.length < 2) return text;
+    const query = searchQuery.toLowerCase();
+    const lowerText = text.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let lastEnd = 0;
+    let matchNum = 0;
+    let idx: number;
+    while ((idx = lowerText.indexOf(query, lastEnd)) !== -1) {
+      if (idx > lastEnd) parts.push(text.slice(lastEnd, idx));
+      const key = `${segmentId}-${matchNum}`;
+      const globalIdx = searchMatches.findIndex((m) => m.key === key);
+      const isCurrent = globalIdx === currentMatchIdx;
+      parts.push(
+        <mark
+          key={key}
+          ref={(el) => { matchRefs.current.set(key, el as HTMLDivElement | null); }}
+          className={isCurrent ? "bg-accent/40 text-text-primary rounded-sm px-px" : "bg-accent/15 text-text-primary rounded-sm px-px"}
+        >
+          {text.slice(idx, idx + searchQuery.length)}
+        </mark>
+      );
+      lastEnd = idx + searchQuery.length;
+      matchNum++;
+    }
+    if (lastEnd < text.length) parts.push(text.slice(lastEnd));
+    return <>{parts}</>;
+  };
+
   return (
     <div className="flex flex-col gap-2">
       {/* Header */}
@@ -98,13 +180,59 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
           {segments.length} segments
           <span className="ml-2 text-text-muted/50">click text to edit</span>
         </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
-        >
-          {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+        <div className="flex items-center gap-1">
+          {searchOpen ? (
+            <div className="flex items-center gap-1 bg-bg-input border border-border-subtle rounded px-1.5 py-0.5">
+              <Search size={10} className="text-text-muted shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); e.shiftKey ? goToPrevMatch() : goToNextMatch(); }
+                  if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); }
+                }}
+                placeholder="Find..."
+                className="bg-transparent text-[11px] text-text-primary placeholder:text-text-muted/50 outline-none w-28"
+                autoFocus
+              />
+              {searchMatches.length > 0 && (
+                <span className="text-[10px] text-text-muted font-mono tabular-nums shrink-0">
+                  {currentMatchIdx + 1}/{searchMatches.length}
+                </span>
+              )}
+              {searchQuery.length >= 2 && searchMatches.length === 0 && (
+                <span className="text-[10px] text-text-muted shrink-0">0</span>
+              )}
+              <button onClick={goToPrevMatch} className="p-0.5 text-text-muted hover:text-text-secondary cursor-pointer" title="Previous (Shift+Enter)">
+                <ChevronUp size={10} />
+              </button>
+              <button onClick={goToNextMatch} className="p-0.5 text-text-muted hover:text-text-secondary cursor-pointer" title="Next (Enter)">
+                <ChevronDown size={10} />
+              </button>
+              <button onClick={() => { setSearchOpen(false); setSearchQuery(""); }} className="p-0.5 text-text-muted hover:text-text-secondary cursor-pointer">
+                <X size={10} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 0); }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              title="Search transcript (Cmd+F)"
+            >
+              <Search size={10} />
+              Find
+            </button>
+          )}
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
 
       {/* Segments */}
@@ -169,7 +297,7 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
                     }`}
                     title="Click to edit"
                   >
-                    {segment.text}
+                    {renderHighlightedText(segment.text, segment.id)}
                     <Pencil size={9} className="inline ml-1 opacity-0 group-hover:opacity-30 transition-opacity" />
                   </p>
                 )}
