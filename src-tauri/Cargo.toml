@@ -1,6 +1,6 @@
 [package]
 name = "plate"
-version = "0.5.1"
+version = "0.5.2"
 description = "Lecture recording, transcription & note generation for macOS"
 authors = ["you"]
 edition = "2021"

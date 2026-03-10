@@ -13,6 +13,8 @@ const defaultSettings: Settings = {
   whisper_model: "ggml-base.en",
   openai_api_key: "",
   audio_sample_rate: 16000,
+  default_prompt_style: "summary",
+  default_custom_prompt: "",
 };
 
 export function useSettings() {

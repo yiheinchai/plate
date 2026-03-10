@@ -53,8 +53,9 @@ export async function exportRecording(id: string): Promise<string> {
   return invoke<string>("export_recording", { id });
 }
 
-export function getRecordingAudioUrl(filePath: string): string {
-  return convertFileSrc(filePath);
+export async function getPlayableAudioUrl(id: string): Promise<string> {
+  const path = await invoke<string>("get_playable_audio", { id });
+  return convertFileSrc(path);
 }
 
 // ─── Transcript Commands ───

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Save, Trash2, Pencil } from "lucide-react";
+import { ChevronDown, Save, Trash2, Pencil, Star } from "lucide-react";
 import * as tauri from "../../lib/tauri";
 import type { SavedPrompt } from "../../lib/types";
 
@@ -26,10 +26,22 @@ export default function PromptPicker({
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [saveName, setSaveName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Load saved prompts and default settings.
   useEffect(() => {
     tauri.listSavedPrompts().then(setSavedPrompts).catch(console.error);
+    tauri.getSettings().then((settings) => {
+      if (settings.default_prompt_style === "custom" && settings.default_custom_prompt) {
+        setIsCustomMode(true);
+        setCustomPrompt(settings.default_custom_prompt);
+      } else if (settings.default_prompt_style) {
+        setSelectedStyle(settings.default_prompt_style);
+        setIsCustomMode(false);
+      }
+      setDefaultLoaded(true);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -61,6 +73,38 @@ export default function PromptPicker({
     setIsOpen(false);
   };
 
+  const handleSetDefault = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const settings = await tauri.getSettings();
+      if (isCustomMode) {
+        settings.default_prompt_style = "custom";
+        settings.default_custom_prompt = customPrompt;
+      } else {
+        settings.default_prompt_style = selectedStyle;
+        settings.default_custom_prompt = "";
+      }
+      await tauri.updateSettings(settings);
+    } catch (err) {
+      console.error("Failed to set default:", err);
+    }
+  };
+
+  const handleSetSavedAsDefault = async (prompt: SavedPrompt, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const settings = await tauri.getSettings();
+      settings.default_prompt_style = "custom";
+      settings.default_custom_prompt = prompt.prompt_text;
+      await tauri.updateSettings(settings);
+      setCustomPrompt(prompt.prompt_text);
+      setIsCustomMode(true);
+      setIsOpen(false);
+    } catch (err) {
+      console.error("Failed to set default:", err);
+    }
+  };
+
   const handleSavePrompt = async () => {
     if (!saveName.trim() || !customPrompt.trim()) return;
     try {
@@ -90,6 +134,8 @@ export default function PromptPicker({
       onGenerate(selectedStyle);
     }
   };
+
+  if (!defaultLoaded) return null;
 
   return (
     <div className="flex items-center gap-1.5" ref={dropdownRef}>
@@ -164,16 +210,36 @@ export default function PromptPicker({
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-white/[0.04] transition-colors cursor-pointer group"
                   >
                     <span className="truncate">{prompt.name}</span>
-                    <button
-                      onClick={(e) => handleDeletePrompt(prompt.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-record/10 hover:text-record transition-all cursor-pointer"
-                    >
-                      <Trash2 size={10} />
-                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={(e) => handleSetSavedAsDefault(prompt, e)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent/10 hover:text-accent transition-all cursor-pointer"
+                        title="Set as default"
+                      >
+                        <Star size={10} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeletePrompt(prompt.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-record/10 hover:text-record transition-all cursor-pointer"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
                   </button>
                 ))}
               </div>
             )}
+
+            {/* Set current as default */}
+            <div className="border-t border-border-subtle py-1">
+              <button
+                onClick={handleSetDefault}
+                className="w-full flex items-center gap-1 px-2.5 py-1.5 text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/[0.04] transition-colors cursor-pointer"
+              >
+                <Star size={10} />
+                <span>Set current as default</span>
+              </button>
+            </div>
           </div>
         )}
       </div>

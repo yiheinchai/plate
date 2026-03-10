@@ -297,6 +297,98 @@ pub async fn rename_recording(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Get a browser-playable (16-bit PCM) version of a recording's WAV file.
+/// Converts 32-bit float WAV to 16-bit PCM in a temp directory and returns the path.
+#[tauri::command]
+pub async fn get_playable_audio(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    let db_path = state.db_path.clone();
+    let cache_dir = state.data_dir.join("audio_cache");
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create audio cache dir: {}", e))?;
+
+    let recording: RecordingRow = tokio::task::spawn_blocking({
+        let db = db_path.clone();
+        let rid = id.clone();
+        move || -> Result<RecordingRow, String> {
+            let conn = rusqlite::Connection::open(&db)
+                .map_err(|e| format!("Failed to open database: {}", e))?;
+            conn.query_row(recordings::SELECT_RECORDING_BY_ID_SQL, params![rid], |row| {
+                Ok(RecordingRow {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    source_type: row.get(2)?,
+                    file_path: row.get(3)?,
+                    duration_ms: row.get(4)?,
+                    sample_rate: row.get(5)?,
+                    created_at: row.get(6)?,
+                    file_size: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Recording not found: {}", e))
+        }
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    let cached_path = cache_dir.join(format!("{}.wav", id));
+    if cached_path.exists() {
+        return Ok(cached_path.to_string_lossy().into_owned());
+    }
+
+    let source_path = recording.file_path.clone();
+    let dest = cached_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let reader = hound::WavReader::open(&source_path)
+            .map_err(|e| format!("Failed to open WAV: {}", e))?;
+        let spec = reader.spec();
+
+        // If already 16-bit PCM, just copy the file.
+        if spec.sample_format == hound::SampleFormat::Int && spec.bits_per_sample == 16 {
+            std::fs::copy(&source_path, &dest)
+                .map_err(|e| format!("Failed to copy: {}", e))?;
+            return Ok(());
+        }
+
+        // Convert to 16-bit PCM.
+        let out_spec = hound::WavSpec {
+            channels: spec.channels,
+            sample_rate: spec.sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(&dest, out_spec)
+            .map_err(|e| format!("Failed to create output WAV: {}", e))?;
+
+        match spec.sample_format {
+            hound::SampleFormat::Float => {
+                for sample in reader.into_samples::<f32>() {
+                    let s = sample.map_err(|e| format!("Read error: {}", e))?;
+                    let clamped = s.max(-1.0).min(1.0);
+                    let pcm = (clamped * 32767.0) as i16;
+                    writer.write_sample(pcm).map_err(|e| format!("Write error: {}", e))?;
+                }
+            }
+            hound::SampleFormat::Int => {
+                let max_val = (1i64 << (spec.bits_per_sample - 1)) as f32;
+                for sample in reader.into_samples::<i32>() {
+                    let s = sample.map_err(|e| format!("Read error: {}", e))?;
+                    let normalized = s as f32 / max_val;
+                    let pcm = (normalized * 32767.0) as i16;
+                    writer.write_sample(pcm).map_err(|e| format!("Write error: {}", e))?;
+                }
+            }
+        }
+
+        writer.finalize().map_err(|e| format!("Failed to finalize: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    Ok(cached_path.to_string_lossy().into_owned())
+}
+
 /// Export a recording's WAV file to the user's Downloads folder.
 #[tauri::command]
 pub async fn export_recording(state: State<'_, AppState>, id: String) -> Result<String, String> {

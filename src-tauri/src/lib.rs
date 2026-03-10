@@ -84,6 +84,7 @@ pub fn run() {
             commands::recording_cmds::delete_recording,
             commands::recording_cmds::rename_recording,
             commands::recording_cmds::export_recording,
+            commands::recording_cmds::get_playable_audio,
             // Transcription
             commands::transcript_cmds::transcribe_recording,
             commands::transcript_cmds::get_transcript,

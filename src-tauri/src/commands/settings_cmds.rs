@@ -19,6 +19,8 @@ pub struct SettingsResponse {
     pub whisper_model: String,
     pub openai_api_key: String,
     pub audio_sample_rate: u32,
+    pub default_prompt_style: String,
+    pub default_custom_prompt: String,
 }
 
 impl Default for SettingsResponse {
@@ -34,6 +36,8 @@ impl Default for SettingsResponse {
             whisper_model: "ggml-base.en".to_string(),
             openai_api_key: String::new(),
             audio_sample_rate: 16000,
+            default_prompt_style: "summary".to_string(),
+            default_custom_prompt: String::new(),
         }
     }
 }
@@ -76,6 +80,8 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
                 "audio_sample_rate" => {
                     response.audio_sample_rate = value.parse().unwrap_or(16000);
                 }
+                "default_prompt_style" => response.default_prompt_style = value,
+                "default_custom_prompt" => response.default_custom_prompt = value,
                 _ => {}
             }
         }
@@ -106,6 +112,8 @@ pub async fn update_settings(
         ("whisper_model", settings.whisper_model.clone()),
         ("openai_api_key", settings.openai_api_key.clone()),
         ("audio_sample_rate", settings.audio_sample_rate.to_string()),
+        ("default_prompt_style", settings.default_prompt_style.clone()),
+        ("default_custom_prompt", settings.default_custom_prompt.clone()),
     ];
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
@@ -150,6 +158,8 @@ pub async fn update_settings(
     cache.set("anthropic_api_key", &settings.llm_api_key);
     cache.set("claude_session_key", &settings.llm_session_token);
     cache.set("claude_organization_id", &settings.llm_organization_id);
+    cache.set("default_prompt_style", &settings.default_prompt_style);
+    cache.set("default_custom_prompt", &settings.default_custom_prompt);
 
     info!("Settings updated");
     Ok(())

@@ -118,6 +118,7 @@ pub struct SettingsCache {
     pub default_whisper_model: Option<String>,
     pub default_llm_provider: Option<String>,
     pub default_prompt_style: Option<String>,
+    pub default_custom_prompt: Option<String>,
     pub g4f_url: Option<String>,
 }
 
@@ -137,6 +138,7 @@ impl SettingsCache {
             "default_whisper_model" | "whisper_model" => self.default_whisper_model = val,
             "default_llm_provider" => self.default_llm_provider = val,
             "default_prompt_style" => self.default_prompt_style = val,
+            "default_custom_prompt" => self.default_custom_prompt = val,
             "g4f_url" => self.g4f_url = val,
             // Map llm_auth_mode to default_llm_provider
             "llm_auth_mode" => {

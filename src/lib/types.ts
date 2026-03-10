@@ -53,6 +53,8 @@ export interface Settings {
   whisper_model: string;
   openai_api_key: string;
   audio_sample_rate: number;
+  default_prompt_style: string;
+  default_custom_prompt: string;
 }
 
 export interface SavedPrompt {

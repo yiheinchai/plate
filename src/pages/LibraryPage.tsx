@@ -69,6 +69,8 @@ export default function LibraryPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
 
@@ -224,14 +226,29 @@ export default function LibraryPage() {
     }
   };
 
-  const togglePlayback = () => {
+  const togglePlayback = async () => {
     if (!audioRef.current || !selectedRecording) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      if (!audioRef.current.src) {
-        audioRef.current.src = tauri.getRecordingAudioUrl(selectedRecording.file_path);
+      if (!audioReady) {
+        setAudioLoading(true);
+        try {
+          const url = await tauri.getPlayableAudioUrl(selectedRecording.id);
+          audioRef.current.src = url;
+          await new Promise<void>((resolve, reject) => {
+            if (!audioRef.current) return reject();
+            audioRef.current.oncanplaythrough = () => resolve();
+            audioRef.current.onerror = () => reject(new Error("Audio load failed"));
+          });
+          setAudioReady(true);
+        } catch (err) {
+          console.error("Failed to load audio:", err);
+          setAudioLoading(false);
+          return;
+        }
+        setAudioLoading(false);
       }
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
@@ -254,9 +271,12 @@ export default function LibraryPage() {
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = "";
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
     }
     setIsPlaying(false);
+    setAudioReady(false);
+    setAudioLoading(false);
     setPlaybackTime(0);
     setPlaybackDuration(0);
   }, [selectedId]);
@@ -426,15 +446,18 @@ export default function LibraryPage() {
               />
               <button
                 onClick={togglePlayback}
-                className="shrink-0 w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center text-accent hover:bg-accent/25 transition-colors cursor-pointer"
+                disabled={audioLoading}
+                className="shrink-0 w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center text-accent hover:bg-accent/25 transition-colors cursor-pointer disabled:opacity-50"
               >
-                {isPlaying ? <Pause size={11} /> : <Play size={11} className="ml-0.5" />}
+                {audioLoading ? (
+                  <div className="w-3 h-3 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
+                ) : isPlaying ? <Pause size={11} /> : <Play size={11} className="ml-0.5" />}
               </button>
               <input
                 type="range"
                 min={0}
-                max={playbackDuration || 1}
-                step={0.1}
+                max={playbackDuration || 100}
+                step="any"
                 value={playbackTime}
                 onChange={(e) => {
                   const t = parseFloat(e.target.value);
@@ -469,7 +492,16 @@ export default function LibraryPage() {
                 <>
                   {currentTranscript ? (
                     <div className="px-4 py-3">
-                      <TranscriptViewer transcript={currentTranscript} />
+                      <TranscriptViewer
+                        transcript={currentTranscript}
+                        playbackTimeMs={playbackTime * 1000}
+                        onSeek={(ms) => {
+                          if (audioRef.current && audioReady) {
+                            audioRef.current.currentTime = ms / 1000;
+                            setPlaybackTime(ms / 1000);
+                          }
+                        }}
+                      />
                       {/* Re-transcribe button */}
                       <div className="mt-3 pt-3 border-t border-border-subtle">
                         <button
