@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -107,6 +107,7 @@ export default function LibraryPage() {
   const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const [isDragOver, setIsDragOver] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -350,6 +351,48 @@ export default function LibraryPage() {
     }
   };
 
+  const untranscribedCount = recordings.filter((r) => !transcriptMap.has(r.id)).length;
+
+  const handleBatchTranscribe = async () => {
+    const queue = recordings.filter((r) => !transcriptMap.has(r.id));
+    if (queue.length === 0) return;
+    setBatchProgress({ current: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      setBatchProgress({ current: i + 1, total: queue.length });
+      try {
+        const transcript = await tauri.transcribeRecording(queue[i].id);
+        setTranscriptMap((prev) => {
+          const next = new Map(prev);
+          next.set(queue[i].id, transcript);
+          return next;
+        });
+        // Auto-rename from transcript
+        if (isAutoTitle(queue[i].title) && transcript.full_text.length > 20) {
+          autoRenameRecording(queue[i].id, transcript.full_text);
+        }
+        // Auto-generate notes if enabled
+        if (settings.auto_generate_notes) {
+          try {
+            const promptStyle = settings.default_prompt_style || "summary";
+            const customPrompt = settings.default_custom_prompt || undefined;
+            const note = await generateNotes(transcript.id, promptStyle, customPrompt);
+            if (isAutoTitle(queue[i].title) && note.title) {
+              try {
+                await tauri.renameRecording(queue[i].id, note.title);
+                setRecordings((prev) =>
+                  prev.map((r) => r.id === queue[i].id ? { ...r, title: note.title } : r)
+                );
+              } catch { /* non-critical */ }
+            }
+          } catch { /* note generation error handled in hook */ }
+        }
+      } catch (err) {
+        console.error(`Batch transcribe failed for ${queue[i].id}:`, err);
+      }
+    }
+    setBatchProgress(null);
+  };
+
   // Reset audio when selection changes.
   useEffect(() => {
     if (audioRef.current) {
@@ -464,6 +507,30 @@ export default function LibraryPage() {
             className="bg-bg-input border border-border-subtle rounded pl-7 pr-3 py-1 text-[12px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/60 transition-colors w-44"
           />
         </div>
+        {untranscribedCount > 0 && (
+          <button
+            onClick={handleBatchTranscribe}
+            disabled={!!batchProgress || isTranscribing}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+              batchProgress
+                ? "bg-accent/15 text-accent"
+                : "text-text-muted hover:text-accent hover:bg-accent/10"
+            }`}
+            title={`Transcribe ${untranscribedCount} recording${untranscribedCount !== 1 ? "s" : ""}`}
+          >
+            {batchProgress ? (
+              <>
+                <div className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
+                {batchProgress.current}/{batchProgress.total}
+              </>
+            ) : (
+              <>
+                <Zap size={10} />
+                Transcribe All ({untranscribedCount})
+              </>
+            )}
+          </button>
+        )}
         <button
           onClick={handleImportAudio}
           className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
