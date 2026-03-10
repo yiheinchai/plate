@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
@@ -472,6 +472,19 @@ export default function LibraryPage() {
 
   const untranscribedCount = recordings.filter((r) => !transcriptMap.has(r.id)).length;
 
+  const libraryStats = useMemo(() => {
+    const totalMs = recordings.reduce((sum, r) => sum + (r.duration_ms ?? 0), 0);
+    const totalHours = totalMs / 3_600_000;
+    const transcriptCount = transcriptMap.size;
+    let hoursLabel: string;
+    if (totalHours < 1) {
+      hoursLabel = `${Math.round(totalMs / 60_000)}m`;
+    } else {
+      hoursLabel = `${totalHours.toFixed(1)}h`;
+    }
+    return { count: recordings.length, hoursLabel, transcriptCount };
+  }, [recordings, transcriptMap]);
+
   const handleBatchTranscribe = async () => {
     const queue = recordings.filter((r) => !transcriptMap.has(r.id));
     if (queue.length === 0) return;
@@ -774,6 +787,11 @@ export default function LibraryPage() {
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle shrink-0 bg-bg-card">
         <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Library</span>
+        {recordings.length > 0 && (
+          <span className="text-[10px] text-text-muted tabular-nums">
+            {libraryStats.count} · {libraryStats.hoursLabel} · {libraryStats.transcriptCount}T
+          </span>
+        )}
         <button
           onClick={() => setShowStarredOnly(!showStarredOnly)}
           className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
