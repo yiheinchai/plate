@@ -11,17 +11,17 @@ export default function SettingsPanel() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 size={16} className="animate-spin text-text-muted" />
+        <Loader2 size={16} className="animate-spin text-text-muted/30" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-record/10 border border-record/20 rounded">
-          <AlertCircle size={13} className="text-record shrink-0" />
-          <p className="text-[12px] text-record">{error}</p>
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-record/5 border border-record/10 rounded-xl">
+          <AlertCircle size={13} className="text-record/70 shrink-0" />
+          <p className="text-[12px] text-record/80">{error}</p>
         </div>
       )}
 
@@ -29,17 +29,17 @@ export default function SettingsPanel() {
       <TranscriptionConfig settings={settings} updateField={updateField} />
 
       {/* Audio */}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">Audio</h2>
-        <div className="bg-bg-card border border-border-subtle rounded p-3">
-          <label className="flex flex-col gap-1">
+      <section className="flex flex-col gap-2.5">
+        <h2 className="text-[10px] font-semibold text-text-muted/40 uppercase tracking-[0.15em]">Audio</h2>
+        <div className="bg-white/[0.02] border border-border-subtle rounded-xl p-4">
+          <label className="flex flex-col gap-1.5">
             <span className="text-[12px] text-text-secondary">Sample Rate</span>
             <select
               value={settings.audio_sample_rate}
               onChange={(e) =>
                 updateField("audio_sample_rate", Number(e.target.value))
               }
-              className="bg-bg-input border border-border-subtle rounded px-2 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+              className="bg-white/[0.04] border border-border-subtle rounded-lg px-3 py-2 text-[12px] text-text-primary outline-none focus:border-accent/30 transition-all"
             >
               <option value={16000}>16,000 Hz (recommended)</option>
               <option value={44100}>44,100 Hz</option>
@@ -54,13 +54,13 @@ export default function SettingsPanel() {
       {/* Auto-save status */}
       <div className="flex justify-end h-5">
         {isSaving && (
-          <span className="flex items-center gap-1 text-[11px] text-text-muted">
+          <span className="flex items-center gap-1.5 text-[11px] text-text-muted/40">
             <Loader2 size={10} className="animate-spin" />
             Saving...
           </span>
         )}
         {saved && !isSaving && (
-          <span className="flex items-center gap-1 text-[11px] text-success">
+          <span className="flex items-center gap-1.5 text-[11px] text-success/60">
             <Check size={10} />
             Saved
           </span>

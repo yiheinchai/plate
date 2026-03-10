@@ -15,7 +15,6 @@ type UpdateState =
 export default function UpdateChecker() {
   const [state, setState] = useState<UpdateState>({ status: "idle" });
 
-  // Check on mount
   useEffect(() => {
     checkForUpdate();
   }, []);
@@ -76,55 +75,55 @@ export default function UpdateChecker() {
   };
 
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+    <section className="flex flex-col gap-2.5">
+      <h2 className="text-[10px] font-semibold text-text-muted/40 uppercase tracking-[0.15em]">
         Updates
       </h2>
-      <div className="bg-bg-card border border-border-subtle rounded p-3">
+      <div className="bg-white/[0.02] border border-border-subtle rounded-xl p-4">
         {state.status === "idle" || state.status === "checking" ? (
           <div className="flex items-center gap-2">
-            <Loader2 size={13} className="animate-spin text-text-muted" />
-            <span className="text-[12px] text-text-muted">Checking for updates...</span>
+            <Loader2 size={13} className="animate-spin text-text-muted/30" />
+            <span className="text-[12px] text-text-muted/50">Checking for updates...</span>
           </div>
         ) : state.status === "up-to-date" ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Check size={13} className="text-success" />
+              <Check size={13} className="text-success/60" />
               <span className="text-[12px] text-text-secondary">You're up to date</span>
             </div>
             <button
               onClick={checkForUpdate}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-text-muted/40 hover:text-text-secondary hover:bg-white/[0.04] transition-all cursor-pointer"
             >
               <RefreshCw size={10} />
               Check again
             </button>
           </div>
         ) : state.status === "available" ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-text-primary">
-                Version <strong>{state.version}</strong> available
+                Version <strong className="text-accent">{state.version}</strong> available
               </span>
               <button
                 onClick={installUpdate}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium bg-accent text-white hover:bg-accent-hover transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-accent text-white hover:bg-accent-hover transition-all cursor-pointer shadow-lg shadow-accent/20"
               >
                 <Download size={11} />
                 Update now
               </button>
             </div>
             {state.body && (
-              <p className="text-[11px] text-text-muted line-clamp-3">{state.body}</p>
+              <p className="text-[11px] text-text-muted/40 line-clamp-3">{state.body}</p>
             )}
           </div>
         ) : state.status === "downloading" ? (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-[12px] text-text-secondary">Downloading update...</span>
-              <span className="text-[11px] text-text-muted">{state.progress}%</span>
+              <span className="text-[11px] text-text-muted/50 font-mono">{state.progress}%</span>
             </div>
-            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent rounded-full transition-all duration-200"
                 style={{ width: `${state.progress}%` }}
@@ -138,10 +137,10 @@ export default function UpdateChecker() {
           </div>
         ) : state.status === "error" ? (
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-text-muted">{state.message}</span>
+            <span className="text-[12px] text-text-muted/50">{state.message}</span>
             <button
               onClick={checkForUpdate}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-text-muted/40 hover:text-text-secondary hover:bg-white/[0.04] transition-all cursor-pointer"
             >
               <RefreshCw size={10} />
               Retry

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, FileText } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note } from "../lib/types";
@@ -85,11 +85,9 @@ export default function LibraryPage() {
     }
   }, []);
 
-  // Reload data every time the Library route becomes active
   useEffect(() => {
     loadData().then((data) => {
       if (!data) return;
-      // If navigated from Record page with a recording to auto-select
       if (navState?.selectRecordingId && handledNavState.current !== navState.selectRecordingId) {
         handledNavState.current = navState.selectRecordingId;
         const rid = navState.selectRecordingId;
@@ -97,8 +95,6 @@ export default function LibraryPage() {
         const t = data.transcriptMap.get(rid);
         setCurrentTranscript(t ?? null);
         setDetailTab("transcript");
-
-        // Auto-transcribe if needed
         if (navState.autoTranscribe && !data.transcriptMap.has(rid)) {
           handleTranscribe(rid);
         }
@@ -106,7 +102,6 @@ export default function LibraryPage() {
     });
   }, [location.key]);
 
-  // Load notes when transcript changes
   useEffect(() => {
     if (currentTranscript) {
       tauri.listNotes(currentTranscript.id).then(setRecordingNotes).catch(console.error);
@@ -137,7 +132,6 @@ export default function LibraryPage() {
         next.set(recordingId, transcript);
         return next;
       });
-      // Auto-rename recording from transcript content
       const recording = recordings.find((r) => r.id === recordingId);
       if (recording && isAutoTitle(recording.title) && transcript.full_text.length > 20) {
         autoRenameRecording(recordingId, transcript.full_text);
@@ -149,10 +143,7 @@ export default function LibraryPage() {
 
   const autoRenameRecording = async (recordingId: string, transcriptText: string) => {
     try {
-      // Use a short LLM call to generate a name
       const preview = transcriptText.slice(0, 300);
-      // We'll generate a title via the generate_notes title prompt mechanism
-      // For now, extract a sensible name from the first sentence
       const firstSentence = preview.split(/[.!?]/)[0]?.trim();
       if (firstSentence && firstSentence.length > 5 && firstSentence.length < 80) {
         await tauri.renameRecording(recordingId, firstSentence);
@@ -171,12 +162,9 @@ export default function LibraryPage() {
     if (!currentTranscript) return;
     try {
       const note = await generateNotes(currentTranscript.id, promptStyle, customPrompt);
-      // Refresh notes for this transcript
       const notes = await tauri.listNotes(currentTranscript.id);
       setRecordingNotes(notes);
       setDetailTab("notes");
-
-      // Also auto-rename recording if it still has the default title
       const recording = recordings.find((r) => r.id === selectedId);
       if (recording && isAutoTitle(recording.title) && note.title) {
         try {
@@ -226,7 +214,6 @@ export default function LibraryPage() {
 
   const selectedRecording = recordings.find((r) => r.id === selectedId);
 
-  // If viewing a specific note, show the NoteViewer full-screen in the detail panel
   if (viewingNote) {
     return (
       <div className="flex flex-col h-full min-w-0">
@@ -238,25 +225,25 @@ export default function LibraryPage() {
   return (
     <div className="flex flex-col h-full min-w-0">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle shrink-0 bg-bg-card">
-        <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Library</span>
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border-subtle shrink-0">
+        <span className="text-[11px] font-semibold text-text-muted/50 uppercase tracking-[0.15em]">Library</span>
         <div className="flex-1" />
         <div className="relative">
           <Search
             size={13}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none"
           />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search..."
-            className="bg-bg-input border border-border-subtle rounded pl-7 pr-3 py-1 text-[12px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/60 transition-colors w-44"
+            className="bg-white/[0.04] border border-border-subtle rounded-lg pl-7 pr-3 py-1.5 text-[12px] text-text-primary placeholder:text-text-muted/30 outline-none focus:border-accent/30 focus:bg-white/[0.06] transition-all w-44"
           />
         </div>
         <button
           onClick={() => loadData()}
-          className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-center justify-center w-7 h-7 rounded-lg text-text-muted/40 hover:text-text-secondary hover:bg-white/[0.04] transition-all cursor-pointer"
           title="Refresh"
         >
           <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
@@ -266,19 +253,21 @@ export default function LibraryPage() {
       {/* Content */}
       <div className="flex flex-1 min-h-0 min-w-0">
         {/* Recording list sidebar */}
-        <div className={`overflow-y-auto min-w-0 ${selectedId ? "w-[260px] shrink-0 border-r border-border-subtle" : "flex-1 max-w-md"}`}>
+        <div className={`overflow-y-auto min-w-0 ${selectedId ? "w-[280px] shrink-0 border-r border-border-subtle" : "flex-1 max-w-md"}`}>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw size={16} className="animate-spin text-text-muted" />
+              <RefreshCw size={16} className="animate-spin text-text-muted/30" />
             </div>
           ) : filteredRecordings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-              <Mic size={28} strokeWidth={1} className="mb-2 opacity-30" />
-              <p className="text-[12px]">Nothing on your plate yet</p>
-              <p className="text-[11px] mt-0.5 text-text-muted/60">Record a lecture to get started</p>
+            <div className="flex flex-col items-center justify-center py-16 text-text-muted">
+              <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center mb-3">
+                <Mic size={20} strokeWidth={1.5} className="text-text-muted/30" />
+              </div>
+              <p className="text-[13px] text-text-muted/50 font-medium">Nothing on your plate yet</p>
+              <p className="text-[11px] mt-1 text-text-muted/30">Record a lecture to get started</p>
             </div>
           ) : (
-            <div className="flex flex-col">
+            <div className="flex flex-col py-1">
               {filteredRecordings.map((recording) => {
                 const isSelected = selectedId === recording.id;
                 const hasTranscript = transcriptMap.has(recording.id);
@@ -289,49 +278,49 @@ export default function LibraryPage() {
                   <button
                     key={recording.id}
                     onClick={() => handleSelect(recording)}
-                    className={`group w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors cursor-pointer ${
+                    className={`group w-full flex items-center gap-3 px-3 py-2.5 mx-1 rounded-lg text-left transition-all duration-150 cursor-pointer ${
                       isSelected
-                        ? "bg-accent/15 text-text-primary"
+                        ? "bg-accent/10 text-text-primary"
                         : "hover:bg-white/[0.03] text-text-secondary"
                     }`}
                   >
-                    <div className="shrink-0">
+                    <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                      isSelected ? "bg-accent/15" : "bg-white/[0.04]"
+                    }`}>
                       {isMic ? (
-                        <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                        <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted/50"} />
                       ) : (
-                        <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                        <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted/50"} />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[12px] font-medium truncate">
                         {recording.title}
                       </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5">
                         {duration && (
-                          <span className="text-[10px] text-text-muted flex items-center gap-0.5">
+                          <span className="text-[10px] text-text-muted/50 flex items-center gap-0.5">
                             <Clock size={8} />
                             {duration}
                           </span>
                         )}
-                        <span className="text-[10px] text-text-muted">
+                        <span className="text-[10px] text-text-muted/40">
                           {formatDate(recording.created_at)}
                         </span>
+                        {hasTranscript && (
+                          <span className="text-[9px] font-medium text-success/60 bg-success/8 px-1.5 py-0.5 rounded-full">
+                            transcribed
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {hasTranscript && (
-                        <span className="text-[9px] font-medium text-success">
-                          T
-                        </span>
-                      )}
-                      <button
-                        onClick={(e) => handleDeleteRecording(recording.id, e)}
-                        className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => handleDeleteRecording(recording.id, e)}
+                      className="shrink-0 p-1.5 rounded-lg text-text-muted/30 opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </button>
                 );
               })}
@@ -343,30 +332,35 @@ export default function LibraryPage() {
         {selectedId && selectedRecording && (
           <div className="flex-1 min-w-0 flex flex-col">
             {/* Detail toolbar with tabs */}
-            <div className="flex items-center gap-0 border-b border-border-subtle bg-bg-card shrink-0">
+            <div className="flex items-center gap-1 px-2 border-b border-border-subtle shrink-0">
               <button
                 onClick={() => setDetailTab("transcript")}
-                className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`px-3 py-2.5 text-[11px] font-medium border-b-2 transition-all cursor-pointer ${
                   detailTab === "transcript"
                     ? "border-accent text-text-primary"
-                    : "border-transparent text-text-muted hover:text-text-secondary"
+                    : "border-transparent text-text-muted/50 hover:text-text-secondary"
                 }`}
               >
                 Transcript
               </button>
               <button
                 onClick={() => setDetailTab("notes")}
-                className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
+                className={`px-3 py-2.5 text-[11px] font-medium border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
                   detailTab === "notes"
                     ? "border-accent text-text-primary"
-                    : "border-transparent text-text-muted hover:text-text-secondary"
+                    : "border-transparent text-text-muted/50 hover:text-text-secondary"
                 }`}
               >
-                Notes{recordingNotes.length > 0 && ` (${recordingNotes.length})`}
+                Notes
+                {recordingNotes.length > 0 && (
+                  <span className="text-[9px] bg-accent/15 text-accent px-1.5 py-0.5 rounded-full font-semibold">
+                    {recordingNotes.length}
+                  </span>
+                )}
               </button>
               <div className="flex-1" />
               {currentTranscript && (
-                <div className="pr-2">
+                <div className="pr-1">
                   <PromptPicker
                     onGenerate={handleGenerateNotes}
                     isGenerating={isGenerating}
@@ -376,8 +370,8 @@ export default function LibraryPage() {
             </div>
 
             {notesError && (
-              <div className="px-3 py-1.5 bg-record/10 border-b border-record/20">
-                <p className="text-[11px] text-record break-words">{notesError}</p>
+              <div className="px-4 py-2 bg-record/5 border-b border-record/10">
+                <p className="text-[11px] text-record/80 break-words">{notesError}</p>
               </div>
             )}
 
@@ -388,32 +382,32 @@ export default function LibraryPage() {
                   {currentTranscript ? (
                     <div className="px-4 py-3">
                       <TranscriptViewer transcript={currentTranscript} />
-                      {/* Re-transcribe button */}
-                      <div className="mt-3 pt-3 border-t border-border-subtle">
+                      {/* Re-transcribe */}
+                      <div className="mt-4 pt-3 border-t border-border-subtle">
                         <button
                           onClick={() => handleTranscribe(selectedRecording.id)}
                           disabled={isTranscribing}
-                          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
                             isTranscribing
-                              ? "bg-white/5 text-text-muted cursor-not-allowed"
-                              : "bg-white/5 text-text-muted hover:text-text-secondary hover:bg-white/10"
+                              ? "bg-white/[0.03] text-text-muted/40 cursor-not-allowed"
+                              : "bg-white/[0.04] text-text-muted/60 hover:text-text-secondary hover:bg-white/[0.07] border border-border-subtle"
                           }`}
                         >
                           {isTranscribing ? (
                             <span className="flex items-center gap-1.5">
-                              <div className="w-2.5 h-2.5 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
+                              <div className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
                               {downloadProgress ? "Downloading model..." : "Transcribing..."}
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1.5">
                               <RefreshCw size={10} />
                               Re-transcribe with current model
                             </span>
                           )}
                         </button>
                         {downloadProgress && downloadProgress.total && downloadProgress.total > 0 && (
-                          <div className="flex flex-col items-start gap-1 mt-2">
-                            <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="flex flex-col items-start gap-1.5 mt-2.5">
+                            <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-accent rounded-full transition-all duration-200"
                                 style={{
@@ -421,7 +415,7 @@ export default function LibraryPage() {
                                 }}
                               />
                             </div>
-                            <p className="text-[10px] text-text-muted">
+                            <p className="text-[10px] text-text-muted/50">
                               Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
                               {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
                             </p>
@@ -430,31 +424,32 @@ export default function LibraryPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-12 gap-2">
-                      <p className="text-[12px] text-text-muted">No transcript yet</p>
+                    <div className="flex flex-col items-center justify-center py-16 gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center">
+                        <FileText size={20} strokeWidth={1.5} className="text-text-muted/30" />
+                      </div>
+                      <p className="text-[12px] text-text-muted/50">No transcript yet</p>
                       <button
                         onClick={() => handleTranscribe(selectedRecording.id)}
                         disabled={isTranscribing}
-                        className={`px-3 py-1.5 rounded text-[12px] font-medium transition-colors cursor-pointer ${
+                        className={`px-4 py-2 rounded-lg text-[12px] font-medium transition-all cursor-pointer ${
                           isTranscribing
-                            ? "bg-accent/30 text-accent/50 cursor-not-allowed"
-                            : "bg-accent text-white hover:bg-accent-hover"
+                            ? "bg-accent/20 text-accent/50 cursor-not-allowed"
+                            : "bg-accent text-white hover:bg-accent-hover shadow-lg shadow-accent/20 hover:shadow-accent/30 hover:scale-[1.02]"
                         }`}
                       >
                         {isTranscribing ? (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-2">
                             <div className="w-3 h-3 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
-                            {downloadProgress
-                              ? "Downloading model..."
-                              : "Transcribing..."}
+                            {downloadProgress ? "Downloading model..." : "Transcribing..."}
                           </span>
                         ) : (
                           "Transcribe"
                         )}
                       </button>
                       {downloadProgress && downloadProgress.total && downloadProgress.total > 0 && (
-                        <div className="flex flex-col items-center gap-1 mt-1">
-                          <div className="w-48 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="flex flex-col items-center gap-1.5 mt-1">
+                          <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                             <div
                               className="h-full bg-accent rounded-full transition-all duration-200"
                               style={{
@@ -462,7 +457,7 @@ export default function LibraryPage() {
                               }}
                             />
                           </div>
-                          <p className="text-[10px] text-text-muted">
+                          <p className="text-[10px] text-text-muted/50">
                             Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
                             {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
                           </p>
@@ -476,35 +471,37 @@ export default function LibraryPage() {
               {detailTab === "notes" && (
                 <>
                   {recordingNotes.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-                      <p className="text-[12px]">No notes generated yet</p>
-                      <p className="text-[11px] mt-0.5 text-text-muted/60">
+                    <div className="flex flex-col items-center justify-center py-16 text-text-muted">
+                      <div className="w-12 h-12 rounded-2xl bg-white/[0.03] flex items-center justify-center mb-3">
+                        <FileText size={20} strokeWidth={1.5} className="text-text-muted/30" />
+                      </div>
+                      <p className="text-[12px] text-text-muted/50">No notes generated yet</p>
+                      <p className="text-[11px] mt-1 text-text-muted/30">
                         {currentTranscript
                           ? "Click Generate Notes above"
                           : "Transcribe first, then generate notes"}
                       </p>
                     </div>
                   ) : recordingNotes.length === 1 ? (
-                    /* Single note: show content directly */
                     <NoteViewer note={recordingNotes[0]} />
                   ) : (
-                    <div className="flex flex-col">
+                    <div className="flex flex-col py-1">
                       {recordingNotes.map((note) => (
                         <button
                           key={note.id}
                           onClick={() => setViewingNote(note)}
-                          className="group w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors cursor-pointer"
+                          className="group w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-all cursor-pointer"
                         >
                           <div className="flex-1 min-w-0">
                             <div className="text-[12px] font-medium text-text-primary truncate">
                               {note.title}
                             </div>
-                            <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2">
+                            <p className="text-[11px] text-text-muted/50 mt-0.5 line-clamp-2">
                               {note.content.slice(0, 120).replace(/[#*_`]/g, "")}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] text-text-muted capitalize">{note.prompt_style}</span>
-                              <span className="text-[10px] text-text-muted/60 font-mono">{note.model}</span>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-[10px] text-text-muted/40 capitalize bg-white/[0.03] px-1.5 py-0.5 rounded">{note.prompt_style}</span>
+                              <span className="text-[10px] text-text-muted/30 font-mono">{note.model}</span>
                             </div>
                           </div>
                           <button
@@ -512,10 +509,10 @@ export default function LibraryPage() {
                               e.stopPropagation();
                               handleDeleteNote(note.id);
                             }}
-                            className="shrink-0 p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
+                            className="shrink-0 p-1.5 rounded-lg text-text-muted/30 opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
                             title="Delete"
                           >
-                            <Trash2 size={11} />
+                            <Trash2 size={12} />
                           </button>
                         </button>
                       ))}
