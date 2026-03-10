@@ -2,13 +2,15 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { ArrowLeft, Copy, Check, Download } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Copy, Check, Download, Pencil, Save, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import type { Note } from "../../lib/types";
+import * as tauri from "../../lib/tauri";
 
 interface NoteViewerProps {
   note: Note;
   onBack?: () => void;
+  onNoteUpdated?: (note: Note) => void;
 }
 
 function CodeBlock({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -55,9 +57,48 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
   );
 }
 
-export default function NoteViewer({ note, onBack }: NoteViewerProps) {
+export default function NoteViewer({ note, onBack, onNoteUpdated }: NoteViewerProps) {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(note.content);
+  const [editTitle, setEditTitle] = useState(note.title);
+  const [isSaving, setIsSaving] = useState(false);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setEditContent(note.content);
+    setEditTitle(note.title);
+    setIsEditing(false);
+  }, [note.id]);
+
+  const handleStartEdit = () => {
+    setEditContent(note.content);
+    setEditTitle(note.title);
+    setIsEditing(true);
+    setTimeout(() => editRef.current?.focus(), 0);
+  };
+
+  const handleSaveEdit = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await tauri.updateNote(note.id, editTitle, editContent);
+      const updated = { ...note, title: editTitle, content: editContent };
+      onNoteUpdated?.(updated);
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Failed to save note:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditContent(note.content);
+    setEditTitle(note.title);
+    setIsEditing(false);
+  };
 
   const handleExport = async () => {
     try {
@@ -125,16 +166,98 @@ export default function NoteViewer({ note, onBack }: NoteViewerProps) {
             )}
             {saved ? "Saved" : "Export"}
           </button>
+          {isEditing ? (
+            <>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+              >
+                <Save size={10} />
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <X size={10} />
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleStartEdit}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              <Pencil size={10} />
+              Edit
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Inline edit/save for non-toolbar mode */}
+      {!onBack && !isEditing && (
+        <div className="flex justify-end px-5 pt-3">
+          <button
+            onClick={handleStartEdit}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <Pencil size={10} />
+            Edit
+          </button>
+        </div>
+      )}
+      {!onBack && isEditing && (
+        <div className="flex justify-end gap-1 px-5 pt-3">
+          <button
+            onClick={handleSaveEdit}
+            disabled={isSaving}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+          >
+            <Save size={10} />
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+          <button
+            onClick={handleCancelEdit}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <X size={10} />
+            Cancel
+          </button>
         </div>
       )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-5 py-4">
+        {isEditing ? (
+          <div className="max-w-2xl flex flex-col gap-2">
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="bg-bg-input border border-border-subtle rounded px-3 py-1.5 text-[14px] font-semibold text-text-primary outline-none focus:border-accent/40 transition-colors"
+              placeholder="Note title"
+            />
+            <textarea
+              ref={editRef}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "s" && e.metaKey) { e.preventDefault(); handleSaveEdit(); }
+                if (e.key === "Escape") handleCancelEdit();
+              }}
+              className="flex-1 min-h-[400px] bg-bg-input border border-border-subtle rounded px-3 py-2 text-[12px] text-text-primary font-mono leading-relaxed outline-none focus:border-accent/40 transition-colors resize-y"
+              placeholder="Markdown content..."
+            />
+            <p className="text-[10px] text-text-muted">Cmd+S to save, Esc to cancel. Supports Markdown formatting.</p>
+          </div>
+        ) : (
         <div className="max-w-2xl markdown-body">
           {/* Title */}
           {onBack && (
             <>
-              <h1 className="text-lg font-semibold text-text-primary mb-1">{note.title}</h1>
+              <h1 className="text-lg font-semibold text-text-primary mb-1">{isEditing ? editTitle : note.title}</h1>
               <p className="text-[11px] text-text-muted mb-4">
                 {new Date(note.created_at).toLocaleDateString("en-US", {
                   month: "long",
@@ -275,6 +398,7 @@ export default function NoteViewer({ note, onBack }: NoteViewerProps) {
             {note.content}
           </Markdown>
         </div>
+        )}
       </div>
     </div>
   );

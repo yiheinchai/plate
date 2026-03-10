@@ -492,7 +492,14 @@ export default function LibraryPage() {
   if (viewingNote) {
     return (
       <div className="flex flex-col h-full min-w-0">
-        <NoteViewer note={viewingNote} onBack={() => setViewingNote(null)} />
+        <NoteViewer
+          note={viewingNote}
+          onBack={() => setViewingNote(null)}
+          onNoteUpdated={(updated) => {
+            setViewingNote(updated);
+            setRecordingNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n));
+          }}
+        />
       </div>
     );
   }
@@ -998,7 +1005,12 @@ export default function LibraryPage() {
                     </div>
                   ) : recordingNotes.length === 1 ? (
                     /* Single note: show content directly */
-                    <NoteViewer note={recordingNotes[0]} />
+                    <NoteViewer
+                      note={recordingNotes[0]}
+                      onNoteUpdated={(updated) => {
+                        setRecordingNotes((prev) => prev.map((n) => n.id === updated.id ? updated : n));
+                      }}
+                    />
                   ) : (
                     <div className="flex flex-col">
                       {recordingNotes.map((note) => (

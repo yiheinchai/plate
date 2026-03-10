@@ -135,6 +135,10 @@ export async function deleteNote(id: string): Promise<void> {
   return invoke<void>("delete_note", { id });
 }
 
+export async function updateNote(id: string, title: string, content: string): Promise<void> {
+  return invoke<void>("update_note", { id, title, content });
+}
+
 // ─── Bookmark Commands ───
 
 export async function addBookmark(

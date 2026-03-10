@@ -225,6 +225,27 @@ pub async fn list_notes(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Update a note's title and content.
+#[tauri::command]
+pub async fn update_note(
+    state: State<'_, AppState>,
+    id: String,
+    title: String,
+    content: String,
+) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(notes::UPDATE_NOTE_CONTENT_SQL, params![id, title, content])
+            .map_err(|e| format!("Failed to update note: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 /// Delete a note by ID.
 #[tauri::command]
 pub async fn delete_note(state: State<'_, AppState>, id: String) -> Result<(), String> {

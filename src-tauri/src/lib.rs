@@ -108,6 +108,7 @@ pub fn run() {
             commands::notes_cmds::get_note,
             commands::notes_cmds::list_notes,
             commands::notes_cmds::delete_note,
+            commands::notes_cmds::update_note,
             commands::notes_cmds::list_saved_prompts,
             commands::notes_cmds::save_prompt,
             commands::notes_cmds::delete_saved_prompt,
