@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS notes (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS bookmarks (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+    timestamp_ms INTEGER NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -98,6 +106,15 @@ pub struct NoteRow {
     pub provider: String,
     pub model: String,
     pub prompt_style: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BookmarkRow {
+    pub id: String,
+    pub recording_id: String,
+    pub timestamp_ms: i64,
+    pub label: Option<String>,
     pub created_at: String,
 }
 

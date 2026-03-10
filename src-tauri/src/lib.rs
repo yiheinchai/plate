@@ -106,6 +106,11 @@ pub fn run() {
             commands::notes_cmds::list_saved_prompts,
             commands::notes_cmds::save_prompt,
             commands::notes_cmds::delete_saved_prompt,
+            // Bookmarks
+            commands::bookmark_cmds::add_bookmark,
+            commands::bookmark_cmds::list_bookmarks,
+            commands::bookmark_cmds::delete_bookmark,
+            commands::bookmark_cmds::update_bookmark_label,
             // Search
             commands::search_cmds::search,
             // Settings

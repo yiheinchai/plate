@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
-import type { Recording, Transcript, Note, SearchResult } from "../lib/types";
+import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
 import TranscriptViewer from "../components/transcripts/TranscriptViewer";
 import PromptPicker from "../components/notes/PromptPicker";
 import NoteViewer from "../components/notes/NoteViewer";
@@ -82,6 +82,7 @@ export default function LibraryPage() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const [isDragOver, setIsDragOver] = useState(false);
+  const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -132,6 +133,15 @@ export default function LibraryPage() {
       setRecordingNotes([]);
     }
   }, [currentTranscript]);
+
+  // Load bookmarks when selection changes
+  useEffect(() => {
+    if (selectedId) {
+      tauri.listBookmarks(selectedId).then(setBookmarks).catch(console.error);
+    } else {
+      setBookmarks([]);
+    }
+  }, [selectedId]);
 
   const handleSelect = (recording: Recording) => {
     if (selectedId === recording.id) {
@@ -660,6 +670,41 @@ export default function LibraryPage() {
                 {exportingId === selectedRecording.id ? "Saving..." : "Save"}
               </button>
             </div>
+
+            {/* Bookmarks bar */}
+            {bookmarks.length > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 border-b border-border-subtle bg-bg-card overflow-x-auto">
+                <Bookmark size={10} className="text-accent/60 shrink-0" />
+                {bookmarks.map((bm) => (
+                  <button
+                    key={bm.id}
+                    onClick={() => {
+                      const timeSec = bm.timestamp_ms / 1000;
+                      if (audioRef.current && audioReady) {
+                        audioRef.current.currentTime = timeSec;
+                        setPlaybackTime(timeSec);
+                      }
+                    }}
+                    className="group flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent/10 hover:bg-accent/20 text-accent text-[10px] font-mono transition-colors cursor-pointer shrink-0"
+                    title={bm.label || `Bookmark at ${formatDuration(bm.timestamp_ms)}`}
+                  >
+                    {formatDuration(bm.timestamp_ms)}
+                    {bm.label && <span className="text-accent/70 font-sans">{bm.label}</span>}
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tauri.deleteBookmark(bm.id).then(() => {
+                          setBookmarks((prev) => prev.filter((b) => b.id !== bm.id));
+                        });
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-record transition-opacity cursor-pointer"
+                    >
+                      <X size={8} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {notesError && (
               <div className="px-3 py-1.5 bg-record/10 border-b border-record/20">

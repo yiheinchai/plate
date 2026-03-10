@@ -4,6 +4,7 @@ import type {
   Recording,
   Transcript,
   Note,
+  Bookmark,
   Settings,
   SavedPrompt,
   AudioSource,
@@ -128,6 +129,28 @@ export async function listNotes(transcriptId?: string): Promise<Note[]> {
 
 export async function deleteNote(id: string): Promise<void> {
   return invoke<void>("delete_note", { id });
+}
+
+// ─── Bookmark Commands ───
+
+export async function addBookmark(
+  recordingId: string,
+  timestampMs: number,
+  label?: string
+): Promise<Bookmark> {
+  return invoke<Bookmark>("add_bookmark", { recordingId, timestampMs, label });
+}
+
+export async function listBookmarks(recordingId: string): Promise<Bookmark[]> {
+  return invoke<Bookmark[]>("list_bookmarks", { recordingId });
+}
+
+export async function deleteBookmark(id: string): Promise<void> {
+  return invoke<void>("delete_bookmark", { id });
+}
+
+export async function updateBookmarkLabel(id: string, label: string): Promise<void> {
+  return invoke<void>("update_bookmark_label", { id, label });
 }
 
 // ─── Search Commands ───

@@ -39,6 +39,14 @@ export interface Note {
   created_at: string;
 }
 
+export interface Bookmark {
+  id: string;
+  recording_id: string;
+  timestamp_ms: number;
+  label: string | null;
+  created_at: string;
+}
+
 export type AudioSource = "microphone" | "system_audio";
 export type RecordingStatus = "idle" | "recording" | "paused";
 

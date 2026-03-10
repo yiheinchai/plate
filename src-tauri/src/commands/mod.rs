@@ -1,4 +1,5 @@
 pub mod audio_cmds;
+pub mod bookmark_cmds;
 pub mod notes_cmds;
 pub mod recording_cmds;
 pub mod search_cmds;

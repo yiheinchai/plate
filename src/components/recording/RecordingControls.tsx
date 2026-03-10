@@ -1,5 +1,8 @@
-import { Square, Pause, Play } from "lucide-react";
+import { useState } from "react";
+import { Square, Pause, Play, Bookmark } from "lucide-react";
 import { useRecording } from "../../hooks/useRecording";
+import { useAppStore } from "../../stores/appStore";
+import * as tauri from "../../lib/tauri";
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -26,6 +29,9 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
     pauseRecording,
     resumeRecording,
   } = useRecording();
+  const { currentRecordingId } = useAppStore();
+  const [bookmarkFlash, setBookmarkFlash] = useState(false);
+  const [bookmarkCount, setBookmarkCount] = useState(0);
 
   const isIdle = recordingStatus === "idle";
   const isRecording = recordingStatus === "recording";
@@ -33,10 +39,23 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
 
   const handleMainButton = async () => {
     if (isIdle) {
+      setBookmarkCount(0);
       onStart?.();
       await startRecording();
     } else if (onStop) {
       await onStop();
+    }
+  };
+
+  const handleBookmark = async () => {
+    if (!currentRecordingId) return;
+    try {
+      await tauri.addBookmark(currentRecordingId, elapsedMs);
+      setBookmarkCount((c) => c + 1);
+      setBookmarkFlash(true);
+      setTimeout(() => setBookmarkFlash(false), 400);
+    } catch (err) {
+      console.error("Failed to add bookmark:", err);
     }
   };
 
@@ -104,8 +123,21 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
           )}
         </button>
 
-        {/* Spacer for symmetry */}
-        {!isIdle && <div className="w-9" />}
+        {/* Bookmark button */}
+        {!isIdle && (
+          <button
+            onClick={handleBookmark}
+            className={`flex items-center justify-center w-9 h-9 rounded transition-all cursor-pointer ${
+              bookmarkFlash
+                ? "bg-accent/20 text-accent scale-110"
+                : "bg-bg-card border border-border-subtle hover:bg-bg-card-hover text-text-secondary"
+            }`}
+            style={{ animation: "fade-in 0.15s ease-out" }}
+            title="Add bookmark (marks this moment)"
+          >
+            <Bookmark size={14} fill={bookmarkFlash ? "currentColor" : "none"} />
+          </button>
+        )}
       </div>
 
       {/* Status */}
@@ -128,6 +160,11 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
         {isIdle && (
           <span className="text-[10px] text-text-muted/50 mt-0.5">
             Press Space to start
+          </span>
+        )}
+        {!isIdle && bookmarkCount > 0 && (
+          <span className="text-[10px] text-accent/70 ml-1">
+            {bookmarkCount} bookmark{bookmarkCount !== 1 ? "s" : ""}
           </span>
         )}
       </div>

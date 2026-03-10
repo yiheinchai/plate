@@ -2,11 +2,14 @@ import { useEffect, useCallback } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import { useRecording } from "../../hooks/useRecording";
+import { useAppStore } from "../../stores/appStore";
+import * as tauri from "../../lib/tauri";
 
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { recordingStatus, startRecording, stopRecording } = useRecording();
+  const { recordingStatus, startRecording, stopRecording, elapsedMs } = useRecording();
+  const { currentRecordingId } = useAppStore();
 
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
@@ -28,6 +31,13 @@ export default function Layout() {
         return;
       }
 
+      // B key: add bookmark while recording
+      if (e.code === "KeyB" && !e.metaKey && !e.ctrlKey && recordingStatus !== "idle" && currentRecordingId) {
+        e.preventDefault();
+        tauri.addBookmark(currentRecordingId, elapsedMs).catch(console.error);
+        return;
+      }
+
       // Cmd+Shift+R: toggle recording from any page
       if (e.code === "KeyR" && e.metaKey && e.shiftKey) {
         e.preventDefault();
@@ -42,7 +52,7 @@ export default function Layout() {
         }
       }
     },
-    [recordingStatus, startRecording, stopRecording, navigate, location.pathname]
+    [recordingStatus, startRecording, stopRecording, navigate, location.pathname, currentRecordingId, elapsedMs]
   );
 
   useEffect(() => {
