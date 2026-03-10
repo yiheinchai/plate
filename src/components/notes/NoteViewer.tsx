@@ -2,7 +2,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { ArrowLeft, Copy, Check } from "lucide-react";
+import { ArrowLeft, Copy, Check, Download } from "lucide-react";
 import { useState } from "react";
 import type { Note } from "../../lib/types";
 
@@ -57,6 +57,26 @@ function CodeBlock({ className, children }: { className?: string; children: Reac
 
 export default function NoteViewer({ note, onBack }: NoteViewerProps) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      const safeName = note.title.replace(/[^a-zA-Z0-9 _-]/g, "").trim();
+      const filePath = await save({
+        defaultPath: `${safeName}.md`,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!filePath) return;
+      const content = `# ${note.title}\n\n${note.content}`;
+      await writeTextFile(filePath, content);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error("Export failed:", err);
+    }
+  };
 
   const handleCopy = async () => {
     try {
@@ -93,6 +113,17 @@ export default function NoteViewer({ note, onBack }: NoteViewerProps) {
               <Copy size={10} />
             )}
             {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            {saved ? (
+              <Check size={10} className="text-success" />
+            ) : (
+              <Download size={10} />
+            )}
+            {saved ? "Saved" : "Export"}
           </button>
         </div>
       )}
