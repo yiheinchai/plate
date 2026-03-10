@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, FileText } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, FileText, Play, Pause, Download } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note } from "../lib/types";
@@ -54,10 +54,17 @@ export default function LibraryPage() {
   const {
     currentTranscript,
     isTranscribing,
+    transcriptionProgress,
     downloadProgress,
     transcribeRecording,
     setCurrentTranscript,
   } = useTranscript();
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   const { isGenerating, error: notesError, generateNotes } = useNotes();
 
@@ -207,6 +214,43 @@ export default function LibraryPage() {
       console.error("Failed to delete note:", err);
     }
   };
+
+  const togglePlayback = () => {
+    if (!audioRef.current || !selectedRecording) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      if (!audioRef.current.src) {
+        audioRef.current.src = tauri.getRecordingAudioUrl(selectedRecording.file_path);
+      }
+      audioRef.current.play().catch(console.error);
+      setIsPlaying(true);
+    }
+  };
+
+  const handleExport = async (id: string) => {
+    setExportingId(id);
+    try {
+      const path = await tauri.exportRecording(id);
+      console.log("Exported to:", path);
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  // Reset audio when selection changes.
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    setIsPlaying(false);
+    setPlaybackTime(0);
+    setPlaybackDuration(0);
+  }, [selectedId]);
 
   const filteredRecordings = recordings.filter((r) =>
     r.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -369,6 +413,49 @@ export default function LibraryPage() {
               )}
             </div>
 
+            {/* Audio player */}
+            <div className="flex items-center gap-2.5 px-3 py-2 border-b border-border-subtle bg-white/[0.01]">
+              <audio
+                ref={audioRef}
+                onTimeUpdate={(e) => setPlaybackTime(e.currentTarget.currentTime)}
+                onLoadedMetadata={(e) => setPlaybackDuration(e.currentTarget.duration)}
+                onEnded={() => setIsPlaying(false)}
+              />
+              <button
+                onClick={togglePlayback}
+                className="shrink-0 w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center text-accent hover:bg-accent/25 transition-all cursor-pointer"
+              >
+                {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+              </button>
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                <input
+                  type="range"
+                  min={0}
+                  max={playbackDuration || 1}
+                  step={0.1}
+                  value={playbackTime}
+                  onChange={(e) => {
+                    const t = parseFloat(e.target.value);
+                    setPlaybackTime(t);
+                    if (audioRef.current) audioRef.current.currentTime = t;
+                  }}
+                  className="flex-1 h-1 accent-accent cursor-pointer"
+                />
+                <span className="shrink-0 text-[10px] text-text-muted/50 font-mono tabular-nums w-[70px] text-right">
+                  {formatDuration(playbackTime * 1000 || null)} / {formatDuration(playbackDuration * 1000 || null)}
+                </span>
+              </div>
+              <button
+                onClick={() => handleExport(selectedRecording.id)}
+                disabled={exportingId === selectedRecording.id}
+                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-text-muted/40 hover:text-text-secondary hover:bg-white/[0.04] transition-all cursor-pointer"
+                title="Save to Downloads"
+              >
+                <Download size={10} />
+                {exportingId === selectedRecording.id ? "Saving..." : "Save"}
+              </button>
+            </div>
+
             {notesError && (
               <div className="px-4 py-2 bg-record/5 border-b border-record/10">
                 <p className="text-[11px] text-record/80 break-words">{notesError}</p>
@@ -396,7 +483,7 @@ export default function LibraryPage() {
                           {isTranscribing ? (
                             <span className="flex items-center gap-1.5">
                               <div className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
-                              {downloadProgress ? "Downloading model..." : "Transcribing..."}
+                              {downloadProgress ? "Downloading model..." : transcriptionProgress !== null ? `Transcribing ${transcriptionProgress}%...` : "Transcribing..."}
                             </span>
                           ) : (
                             <span className="flex items-center gap-1.5">
@@ -405,20 +492,36 @@ export default function LibraryPage() {
                             </span>
                           )}
                         </button>
-                        {downloadProgress && downloadProgress.total && downloadProgress.total > 0 && (
+                        {isTranscribing && (
                           <div className="flex flex-col items-start gap-1.5 mt-2.5">
-                            <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-accent rounded-full transition-all duration-200"
-                                style={{
-                                  width: `${Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <p className="text-[10px] text-text-muted/50">
-                              Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
-                              {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
-                            </p>
+                            {downloadProgress && downloadProgress.total && downloadProgress.total > 0 ? (
+                              <>
+                                <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-accent rounded-full transition-all duration-200"
+                                    style={{
+                                      width: `${Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%`,
+                                    }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-text-muted/50">
+                                  Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
+                                  {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-accent rounded-full transition-all duration-200"
+                                    style={{ width: `${transcriptionProgress ?? 0}%` }}
+                                  />
+                                </div>
+                                <p className="text-[10px] text-text-muted/50">
+                                  Transcribing — {transcriptionProgress ?? 0}%
+                                </p>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -441,26 +544,42 @@ export default function LibraryPage() {
                         {isTranscribing ? (
                           <span className="flex items-center gap-2">
                             <div className="w-3 h-3 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
-                            {downloadProgress ? "Downloading model..." : "Transcribing..."}
+                            {downloadProgress ? "Downloading model..." : transcriptionProgress !== null ? `Transcribing ${transcriptionProgress}%...` : "Transcribing..."}
                           </span>
                         ) : (
                           "Transcribe"
                         )}
                       </button>
-                      {downloadProgress && downloadProgress.total && downloadProgress.total > 0 && (
+                      {isTranscribing && (
                         <div className="flex flex-col items-center gap-1.5 mt-1">
-                          <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-accent rounded-full transition-all duration-200"
-                              style={{
-                                width: `${Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-text-muted/50">
-                            Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
-                            {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
-                          </p>
+                          {downloadProgress && downloadProgress.total && downloadProgress.total > 0 ? (
+                            <>
+                              <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-accent rounded-full transition-all duration-200"
+                                  style={{
+                                    width: `${Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-text-muted/50">
+                                Downloading {downloadProgress.model} — {Math.round(((downloadProgress.downloaded ?? 0) / downloadProgress.total) * 100)}%
+                                {" "}({Math.round((downloadProgress.downloaded ?? 0) / 1024 / 1024)}/{Math.round(downloadProgress.total / 1024 / 1024)} MB)
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-52 h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-accent rounded-full transition-all duration-200"
+                                  style={{ width: `${transcriptionProgress ?? 0}%` }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-text-muted/50">
+                                Transcribing — {transcriptionProgress ?? 0}%
+                              </p>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

@@ -8,6 +8,7 @@ export function useTranscript() {
     null
   );
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionProgress, setTranscriptionProgress] = useState<number | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressPayload | null>(null);
   const [liveText, setLiveText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,14 @@ export function useTranscript() {
     let cancelled = false;
     let unlistenChunk: (() => void) | null = null;
     let unlistenProgress: (() => void) | null = null;
+    let unlistenTranscriptionProgress: (() => void) | null = null;
+
+    tauri.onTranscriptionProgress((progress) => {
+      if (cancelled) return;
+      setTranscriptionProgress(progress);
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { unlistenTranscriptionProgress = fn; }
+    });
 
     tauri.onTranscriptChunk((text, isFinal) => {
       if (cancelled) return;
@@ -48,6 +57,7 @@ export function useTranscript() {
       cancelled = true;
       unlistenChunk?.();
       unlistenProgress?.();
+      unlistenTranscriptionProgress?.();
     };
   }, []);
 
@@ -58,6 +68,7 @@ export function useTranscript() {
 
   const transcribeRecording = useCallback(async (recordingId: string) => {
     setIsTranscribing(true);
+    setTranscriptionProgress(null);
     setError(null);
     try {
       const transcript = await tauri.transcribeRecording(recordingId);
@@ -70,6 +81,7 @@ export function useTranscript() {
       throw err;
     } finally {
       setIsTranscribing(false);
+      setTranscriptionProgress(null);
     }
   }, []);
 
@@ -105,6 +117,7 @@ export function useTranscript() {
     transcripts,
     currentTranscript,
     isTranscribing,
+    transcriptionProgress,
     downloadProgress,
     liveText,
     error,

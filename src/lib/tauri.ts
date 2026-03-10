@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   Recording,
@@ -11,6 +11,7 @@ import type {
   TranscriptChunkPayload,
   RecordingCompletePayload,
   ModelDownloadProgressPayload,
+  TranscriptionProgressPayload,
   WhisperModelInfo,
 } from "./types";
 
@@ -46,6 +47,14 @@ export async function deleteRecording(id: string): Promise<void> {
 
 export async function renameRecording(id: string, title: string): Promise<void> {
   return invoke<void>("rename_recording", { id, title });
+}
+
+export async function exportRecording(id: string): Promise<string> {
+  return invoke<string>("export_recording", { id });
+}
+
+export function getRecordingAudioUrl(filePath: string): string {
+  return convertFileSrc(filePath);
 }
 
 // ─── Transcript Commands ───
@@ -146,6 +155,14 @@ export function onRecordingComplete(
 ): Promise<UnlistenFn> {
   return listen<RecordingCompletePayload>("recording-complete", (event) => {
     callback(event.payload.recording);
+  });
+}
+
+export function onTranscriptionProgress(
+  callback: (progress: number) => void
+): Promise<UnlistenFn> {
+  return listen<TranscriptionProgressPayload>("transcription-progress", (event) => {
+    callback(event.payload.progress);
   });
 }
 

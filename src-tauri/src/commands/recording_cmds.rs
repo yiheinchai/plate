@@ -297,6 +297,52 @@ pub async fn rename_recording(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Export a recording's WAV file to the user's Downloads folder.
+#[tauri::command]
+pub async fn export_recording(state: State<'_, AppState>, id: String) -> Result<String, String> {
+    let db_path = state.db_path.clone();
+
+    let recording: RecordingRow = tokio::task::spawn_blocking(move || -> Result<RecordingRow, String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.query_row(recordings::SELECT_RECORDING_BY_ID_SQL, params![id], |row| {
+            Ok(RecordingRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                source_type: row.get(2)?,
+                file_path: row.get(3)?,
+                duration_ms: row.get(4)?,
+                sample_rate: row.get(5)?,
+                created_at: row.get(6)?,
+                file_size: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Recording not found: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    let source = std::path::Path::new(&recording.file_path);
+    if !source.exists() {
+        return Err("Recording file not found on disk".to_string());
+    }
+
+    let downloads_dir = dirs::download_dir()
+        .ok_or_else(|| "Could not find Downloads directory".to_string())?;
+
+    // Sanitize the title for use as a filename.
+    let safe_title: String = recording.title
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let dest = downloads_dir.join(format!("{}.wav", safe_title.trim()));
+
+    std::fs::copy(source, &dest)
+        .map_err(|e| format!("Failed to export recording: {}", e))?;
+
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 /// Delete a recording by ID (also removes the WAV file).
 #[tauri::command]
 pub async fn delete_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {

@@ -81,6 +81,10 @@ export interface WhisperModelInfo {
   downloaded: boolean;
 }
 
+export interface TranscriptionProgressPayload {
+  progress: number;
+}
+
 export interface ModelDownloadProgressPayload {
   model: string;
   downloaded?: number;

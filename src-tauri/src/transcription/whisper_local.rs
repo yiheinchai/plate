@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
+use tauri::Emitter;
 use tracing::info;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -129,6 +130,15 @@ impl TranscriptionEngine for WhisperLocal {
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+
+        if let Some(ref app_handle) = self.app_handle {
+            let ah = app_handle.clone();
+            params.set_progress_callback_safe(move |progress| {
+                let _ = ah.emit("transcription-progress", serde_json::json!({
+                    "progress": progress,
+                }));
+            });
+        }
 
         state.full(params, &samples).context("Whisper inference failed")?;
 
