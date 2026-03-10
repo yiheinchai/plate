@@ -57,3 +57,9 @@ ORDER BY created_at DESC
 "#;
 
 pub const DELETE_TRANSCRIPT_SQL: &str = "DELETE FROM transcripts WHERE id = ?1";
+
+pub const UPDATE_SEGMENT_TEXT_SQL: &str =
+    "UPDATE transcript_segments SET text = ?2 WHERE id = ?1";
+
+pub const UPDATE_TRANSCRIPT_FULL_TEXT_SQL: &str =
+    "UPDATE transcripts SET full_text = ?2 WHERE id = ?1";

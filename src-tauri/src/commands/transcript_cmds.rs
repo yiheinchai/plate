@@ -391,3 +391,42 @@ pub async fn delete_whisper_model(
     .map_err(|e| format!("Task join error: {}", e))?
     .map_err(|e| e.to_string())
 }
+
+/// Update a transcript segment's text and rebuild full_text.
+#[tauri::command]
+pub async fn update_segment_text(
+    state: State<'_, AppState>,
+    segment_id: i64,
+    transcript_id: String,
+    text: String,
+) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
+        // Update the segment text.
+        conn.execute(transcripts::UPDATE_SEGMENT_TEXT_SQL, params![segment_id, text])
+            .map_err(|e| format!("Failed to update segment: {}", e))?;
+
+        // Rebuild full_text from all segments.
+        let mut stmt = conn
+            .prepare(transcripts::SELECT_SEGMENTS_BY_TRANSCRIPT_SQL)
+            .map_err(|e| format!("Failed to query segments: {}", e))?;
+        let texts: Vec<String> = stmt
+            .query_map(params![transcript_id], |row| row.get::<_, String>(4))
+            .map_err(|e| format!("Failed to read segments: {}", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+        let full_text = texts.iter().map(|t| t.trim()).collect::<Vec<_>>().join(" ");
+
+        conn.execute(transcripts::UPDATE_TRANSCRIPT_FULL_TEXT_SQL, params![transcript_id, full_text])
+            .map_err(|e| format!("Failed to update full text: {}", e))?;
+
+        info!("Segment {} updated in transcript {}", segment_id, transcript_id);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}

@@ -81,6 +81,14 @@ export async function listTranscripts(
   return invoke<Transcript[]>("list_transcripts", { recordingId });
 }
 
+export async function updateSegmentText(
+  segmentId: number,
+  transcriptId: string,
+  text: string
+): Promise<void> {
+  return invoke<void>("update_segment_text", { segmentId, transcriptId, text });
+}
+
 // ─── Notes Commands ───
 
 export async function generateNotes(

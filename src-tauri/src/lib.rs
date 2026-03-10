@@ -97,6 +97,7 @@ pub fn run() {
             commands::transcript_cmds::list_whisper_models,
             commands::transcript_cmds::download_whisper_model,
             commands::transcript_cmds::delete_whisper_model,
+            commands::transcript_cmds::update_segment_text,
             // Notes
             commands::notes_cmds::generate_notes,
             commands::notes_cmds::get_note,
