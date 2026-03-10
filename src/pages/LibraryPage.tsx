@@ -1006,6 +1006,11 @@ export default function LibraryPage() {
                               </span>
                             )}
                           </div>
+                          {hasTranscript && (
+                            <p className="text-[10px] text-text-muted/60 truncate mt-0.5 leading-tight">
+                              {transcriptMap.get(recording.id)!.full_text.slice(0, 120).trim()}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {hasTranscript && (
