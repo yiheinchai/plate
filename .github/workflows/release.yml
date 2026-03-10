@@ -1,9 +1,8 @@
-name: Build and Release
+name: Build and Release (DISABLED - use scripts/release.sh locally)
 
+# Disabled: builds are done locally to avoid GitHub Actions costs.
+# Run ./scripts/release.sh [version] instead.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
