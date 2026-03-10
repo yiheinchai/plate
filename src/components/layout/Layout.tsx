@@ -1,7 +1,55 @@
-import { Outlet } from "react-router-dom";
+import { useEffect, useCallback } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import { useRecording } from "../../hooks/useRecording";
 
 export default function Layout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { recordingStatus, startRecording, stopRecording } = useRecording();
+
+  const handleKeyDown = useCallback(
+    async (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // Space on Record page: toggle recording
+      if (e.code === "Space" && location.pathname === "/") {
+        e.preventDefault();
+        if (recordingStatus === "idle") {
+          await startRecording();
+        } else {
+          const recording = await stopRecording();
+          navigate("/library", {
+            state: { selectRecordingId: recording.id, autoTranscribe: true },
+          });
+        }
+        return;
+      }
+
+      // Cmd+Shift+R: toggle recording from any page
+      if (e.code === "KeyR" && e.metaKey && e.shiftKey) {
+        e.preventDefault();
+        if (recordingStatus === "idle") {
+          if (location.pathname !== "/") navigate("/");
+          await startRecording();
+        } else {
+          const recording = await stopRecording();
+          navigate("/library", {
+            state: { selectRecordingId: recording.id, autoTranscribe: true },
+          });
+        }
+      }
+    },
+    [recordingStatus, startRecording, stopRecording, navigate, location.pathname]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
   return (
     <div className="flex h-full w-full bg-bg-primary">
       <Sidebar />

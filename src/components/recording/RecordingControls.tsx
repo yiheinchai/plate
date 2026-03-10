@@ -125,6 +125,11 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
           {isRecording && "Recording"}
           {isPaused && "Paused"}
         </span>
+        {isIdle && (
+          <span className="text-[10px] text-text-muted/50 mt-0.5">
+            Press Space to start
+          </span>
+        )}
       </div>
     </div>
   );
