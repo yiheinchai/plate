@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -109,6 +109,7 @@ export default function LibraryPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -446,6 +447,21 @@ export default function LibraryPage() {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // ? key: toggle shortcuts help (works even without a selected recording)
+      if (e.key === "?" || (e.code === "Slash" && e.shiftKey)) {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+        return;
+      }
+
+      // Escape: close shortcuts overlay
+      if (e.code === "Escape" && showShortcuts) {
+        e.preventDefault();
+        setShowShortcuts(false);
+        return;
+      }
+
       if (!selectedId || !audioRef.current) return;
 
       // Space: play/pause (only on library page, not record page)
@@ -499,7 +515,7 @@ export default function LibraryPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [selectedId, audioReady, playbackDuration, playbackSpeed, togglePlayback]);
+  }, [selectedId, audioReady, playbackDuration, playbackSpeed, togglePlayback, showShortcuts]);
 
   // Drag-and-drop audio import via Tauri native events.
   useEffect(() => {
@@ -594,6 +610,60 @@ export default function LibraryPage() {
           <p className="text-[11px] text-text-muted mt-0.5">WAV, MP3, M4A, OGG, FLAC, AAC</p>
         </div>
       )}
+
+      {/* Keyboard shortcuts help overlay */}
+      {showShortcuts && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-bg-card border border-border-subtle rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[14px] font-semibold text-text-primary">Keyboard Shortcuts</h3>
+              <button onClick={() => setShowShortcuts(false)} className="text-text-muted hover:text-text-secondary cursor-pointer">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">Playback</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    ["Space", "Play / Pause"],
+                    ["\u2190", "Skip back 5s"],
+                    ["\u2192", "Skip forward 5s"],
+                    ["[", "Slower speed"],
+                    ["]", "Faster speed"],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-[11px] text-text-secondary">{desc}</span>
+                      <kbd className="text-[10px] font-mono bg-bg-primary border border-border-subtle rounded px-1.5 py-0.5 text-text-muted min-w-[28px] text-center">{key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-border-subtle pt-3">
+                <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">Recording</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    ["\u2318\u21e7R", "Start / Stop recording"],
+                    ["B", "Add bookmark (while recording)"],
+                  ].map(([key, desc]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-[11px] text-text-secondary">{desc}</span>
+                      <kbd className="text-[10px] font-mono bg-bg-primary border border-border-subtle rounded px-1.5 py-0.5 text-text-muted min-w-[28px] text-center">{key}</kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border-t border-border-subtle pt-3">
+                <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">General</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-text-secondary">Show this help</span>
+                  <kbd className="text-[10px] font-mono bg-bg-primary border border-border-subtle rounded px-1.5 py-0.5 text-text-muted min-w-[28px] text-center">?</kbd>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle shrink-0 bg-bg-card">
         <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Library</span>
@@ -659,6 +729,13 @@ export default function LibraryPage() {
           title="Refresh"
         >
           <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} />
+        </button>
+        <button
+          onClick={() => setShowShortcuts(true)}
+          className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          title="Keyboard shortcuts (?)"
+        >
+          <HelpCircle size={13} />
         </button>
       </div>
 
