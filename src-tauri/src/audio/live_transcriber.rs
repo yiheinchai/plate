@@ -153,6 +153,17 @@ impl LiveTranscriber {
 
     /// Run Whisper inference on an audio chunk. Returns the full text or None on error.
     fn transcribe_chunk(ctx: &WhisperContext, samples: &[f32]) -> Option<String> {
+        // Normalize quiet audio for better recognition.
+        let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+        let samples_normalized;
+        let samples = if peak > 0.0 && peak < 0.1 {
+            let gain = 0.9 / peak;
+            samples_normalized = samples.iter().map(|s| (s * gain).clamp(-1.0, 1.0)).collect::<Vec<f32>>();
+            &samples_normalized
+        } else {
+            samples
+        };
+
         let mut state = ctx.create_state().ok()?;
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_language(Some("en"));

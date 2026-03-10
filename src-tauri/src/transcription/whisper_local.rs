@@ -119,7 +119,18 @@ impl TranscriptionEngine for WhisperLocal {
 
         // Load and preprocess audio.
         let audio_path = Path::new(&config.audio_path);
-        let samples = Self::load_audio(audio_path)?;
+        let mut samples = Self::load_audio(audio_path)?;
+
+        // Normalize quiet audio so whisper can hear it.
+        // Find peak amplitude; if below threshold, amplify to target level.
+        let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+        if peak > 0.0 && peak < 0.1 {
+            let gain = 0.9 / peak;
+            info!("Audio is quiet (peak {:.4}), applying {:.1}x gain", peak, gain);
+            for s in samples.iter_mut() {
+                *s = (*s * gain).clamp(-1.0, 1.0);
+            }
+        }
 
         info!("Transcribing {} samples with model {}", samples.len(), model_name);
 
