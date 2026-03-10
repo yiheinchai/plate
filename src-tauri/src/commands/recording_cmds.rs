@@ -172,6 +172,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         sample_rate: sample_rate as i64,
         created_at,
         file_size,
+        starred: false,
     })
 }
 
@@ -237,6 +238,7 @@ pub async fn list_recordings(state: State<'_, AppState>) -> Result<Vec<Recording
                     sample_rate: row.get(5)?,
                     created_at: row.get(6)?,
                     file_size: row.get(7)?,
+                    starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                 })
             })
             .map_err(|e| format!("Failed to query recordings: {}", e))?;
@@ -269,6 +271,7 @@ pub async fn get_recording(state: State<'_, AppState>, id: String) -> Result<Rec
                 sample_rate: row.get(5)?,
                 created_at: row.get(6)?,
                 file_size: row.get(7)?,
+                starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
@@ -322,6 +325,7 @@ pub async fn get_playable_audio(state: State<'_, AppState>, id: String) -> Resul
                     sample_rate: row.get(5)?,
                     created_at: row.get(6)?,
                     file_size: row.get(7)?,
+                    starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                 })
             })
             .map_err(|e| format!("Recording not found: {}", e))
@@ -407,6 +411,7 @@ pub async fn export_recording(state: State<'_, AppState>, id: String) -> Result<
                 sample_rate: row.get(5)?,
                 created_at: row.get(6)?,
                 file_size: row.get(7)?,
+                starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
@@ -517,7 +522,27 @@ pub async fn import_audio(state: State<'_, AppState>, file_path: String) -> Resu
         sample_rate,
         created_at,
         file_size,
+        starred: false,
     })
+}
+
+/// Toggle the starred status of a recording.
+#[tauri::command]
+pub async fn toggle_star(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<bool, String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(recordings::TOGGLE_STAR_SQL, params![id])
+            .map_err(|e| format!("Failed to toggle star: {}", e))?;
+        let starred: i64 = conn
+            .query_row("SELECT starred FROM recordings WHERE id = ?1", params![id], |row| row.get(0))
+            .map_err(|e| format!("Failed to read star status: {}", e))?;
+        Ok(starred != 0)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Delete a recording by ID (also removes the WAV file).

@@ -7,6 +7,7 @@ export interface Recording {
   sample_rate: number;
   created_at: string;
   file_size: number | null;
+  starred: boolean;
 }
 
 export interface Transcript {

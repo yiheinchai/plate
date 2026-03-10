@@ -59,6 +59,10 @@ export async function importAudio(filePath: string): Promise<Recording> {
   return invoke<Recording>("import_audio", { filePath });
 }
 
+export async function toggleStar(id: string): Promise<boolean> {
+  return invoke<boolean>("toggle_star", { id });
+}
+
 export async function getPlayableAudioUrl(id: string): Promise<string> {
   const path = await invoke<string>("get_playable_audio", { id });
   return convertFileSrc(path);

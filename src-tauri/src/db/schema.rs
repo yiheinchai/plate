@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS recordings (
     duration_ms INTEGER,
     sample_rate INTEGER NOT NULL DEFAULT 16000,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    file_size INTEGER
+    file_size INTEGER,
+    starred INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS transcripts (
@@ -75,6 +76,7 @@ pub struct RecordingRow {
     pub sample_rate: i64,
     pub created_at: String,
     pub file_size: Option<i64>,
+    pub starred: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

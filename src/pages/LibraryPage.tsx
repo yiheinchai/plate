@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -108,6 +108,7 @@ export default function LibraryPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -263,6 +264,18 @@ export default function LibraryPage() {
       }
     } catch {
       // Error handled in hook
+    }
+  };
+
+  const handleToggleStar = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const starred = await tauri.toggleStar(id);
+      setRecordings((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, starred } : r))
+      );
+    } catch (err) {
+      console.error("Failed to toggle star:", err);
     }
   };
 
@@ -461,11 +474,15 @@ export default function LibraryPage() {
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery]);
 
-  const filteredRecordings = searchQuery.trim().length < 2
-    ? recordings
-    : recordings.filter((r) =>
-        r.title.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  const filteredRecordings = (() => {
+    let result = recordings;
+    if (showStarredOnly) result = result.filter((r) => r.starred);
+    if (searchQuery.trim().length >= 2) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((r) => r.title.toLowerCase().includes(q));
+    }
+    return result;
+  })();
 
   const hasDeepResults = searchResults.some((r) => r.kind !== "recording");
 
@@ -493,6 +510,17 @@ export default function LibraryPage() {
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle shrink-0 bg-bg-card">
         <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Library</span>
+        <button
+          onClick={() => setShowStarredOnly(!showStarredOnly)}
+          className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+            showStarredOnly
+              ? "text-yellow-400 bg-yellow-400/10"
+              : "text-text-muted hover:text-text-secondary hover:bg-white/5"
+          }`}
+          title={showStarredOnly ? "Show all" : "Show starred only"}
+        >
+          <Star size={13} fill={showStarredOnly ? "currentColor" : "none"} />
+        </button>
         <div className="flex-1" />
         <div className="relative">
           <Search
@@ -665,6 +693,17 @@ export default function LibraryPage() {
                               T
                             </span>
                           )}
+                          <button
+                            onClick={(e) => handleToggleStar(recording.id, e)}
+                            className={`p-1 rounded transition-all cursor-pointer ${
+                              recording.starred
+                                ? "text-yellow-400"
+                                : "text-text-muted opacity-0 group-hover:opacity-100 hover:text-yellow-400"
+                            }`}
+                            title={recording.starred ? "Unstar" : "Star"}
+                          >
+                            <Star size={11} fill={recording.starred ? "currentColor" : "none"} />
+                          </button>
                           <button
                             onClick={(e) => handleDeleteRecording(recording.id, e)}
                             className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
