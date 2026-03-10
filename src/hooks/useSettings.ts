@@ -17,6 +17,7 @@ const defaultSettings: Settings = {
   default_custom_prompt: "",
   auto_transcribe: false,
   auto_generate_notes: false,
+  transcription_language: "auto",
 };
 
 export function useSettings() {

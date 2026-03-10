@@ -83,6 +83,7 @@ impl Recorder {
             self.app_handle.clone(),
             self.models_dir.clone(),
             "ggml-tiny.en".to_string(),
+            Some("en".to_string()),
         );
 
         // Set up WAV writer.

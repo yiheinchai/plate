@@ -23,6 +23,7 @@ pub struct SettingsResponse {
     pub default_custom_prompt: String,
     pub auto_transcribe: bool,
     pub auto_generate_notes: bool,
+    pub transcription_language: String,
 }
 
 impl Default for SettingsResponse {
@@ -42,6 +43,7 @@ impl Default for SettingsResponse {
             default_custom_prompt: String::new(),
             auto_transcribe: false,
             auto_generate_notes: false,
+            transcription_language: "auto".to_string(),
         }
     }
 }
@@ -88,6 +90,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
                 "default_custom_prompt" => response.default_custom_prompt = value,
                 "auto_transcribe" => response.auto_transcribe = value == "true",
                 "auto_generate_notes" => response.auto_generate_notes = value == "true",
+                "transcription_language" => response.transcription_language = value,
                 _ => {}
             }
         }
@@ -122,6 +125,7 @@ pub async fn update_settings(
         ("default_custom_prompt", settings.default_custom_prompt.clone()),
         ("auto_transcribe", settings.auto_transcribe.to_string()),
         ("auto_generate_notes", settings.auto_generate_notes.to_string()),
+        ("transcription_language", settings.transcription_language.clone()),
     ];
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
@@ -170,6 +174,7 @@ pub async fn update_settings(
     cache.set("default_custom_prompt", &settings.default_custom_prompt);
     cache.set("auto_transcribe", &settings.auto_transcribe.to_string());
     cache.set("auto_generate_notes", &settings.auto_generate_notes.to_string());
+    cache.set("transcription_language", &settings.transcription_language);
 
     info!("Settings updated");
     Ok(())

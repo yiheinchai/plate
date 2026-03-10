@@ -78,6 +78,43 @@ export default function TranscriptionConfig({
           </button>
         </div>
 
+        {/* Language */}
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] text-text-secondary">Language</span>
+          <select
+            value={settings.transcription_language}
+            onChange={(e) => updateField("transcription_language", e.target.value)}
+            className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+          >
+            <option value="auto">Auto-detect</option>
+            <option value="en">English</option>
+            <option value="zh">Chinese (中文)</option>
+            <option value="es">Spanish (Español)</option>
+            <option value="fr">French (Français)</option>
+            <option value="de">German (Deutsch)</option>
+            <option value="ja">Japanese (日本語)</option>
+            <option value="ko">Korean (한국어)</option>
+            <option value="pt">Portuguese (Português)</option>
+            <option value="ar">Arabic (العربية)</option>
+            <option value="hi">Hindi (हिन्दी)</option>
+            <option value="it">Italian (Italiano)</option>
+            <option value="nl">Dutch (Nederlands)</option>
+            <option value="pl">Polish (Polski)</option>
+            <option value="ru">Russian (Русский)</option>
+            <option value="tr">Turkish (Türkçe)</option>
+            <option value="vi">Vietnamese (Tiếng Việt)</option>
+            <option value="th">Thai (ไทย)</option>
+            <option value="id">Indonesian (Bahasa)</option>
+            <option value="ms">Malay (Bahasa Melayu)</option>
+            <option value="sv">Swedish (Svenska)</option>
+          </select>
+          <span className="text-[10px] text-text-muted">
+            {settings.transcription_language === "auto"
+              ? "Whisper will detect the language automatically"
+              : "Use non-.en models (e.g. ggml-base) for best multilingual accuracy"}
+          </span>
+        </div>
+
         {/* Engine toggle */}
         <div className="flex flex-col gap-1">
           <span className="text-[12px] text-text-secondary">Engine</span>

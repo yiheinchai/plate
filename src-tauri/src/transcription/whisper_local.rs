@@ -168,8 +168,8 @@ impl TranscriptionEngine for WhisperLocal {
         info!("Transcribing {} samples with model {}", samples.len(), model_name);
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        let language = config.language.as_deref().unwrap_or("en");
-        params.set_language(Some(language));
+        let language = config.language.as_deref();
+        params.set_language(language);
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
@@ -219,7 +219,7 @@ impl TranscriptionEngine for WhisperLocal {
         Ok(TranscriptionResult {
             full_text,
             segments,
-            language: language.to_string(),
+            language: language.unwrap_or("auto").to_string(),
             engine: "local".to_string(),
             model: Some(model_name.to_string()),
         })

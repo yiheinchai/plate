@@ -122,6 +122,7 @@ pub struct SettingsCache {
     pub g4f_url: Option<String>,
     pub auto_transcribe: Option<String>,
     pub auto_generate_notes: Option<String>,
+    pub transcription_language: Option<String>,
 }
 
 impl SettingsCache {
@@ -144,6 +145,7 @@ impl SettingsCache {
             "g4f_url" => self.g4f_url = val,
             "auto_transcribe" => self.auto_transcribe = val,
             "auto_generate_notes" => self.auto_generate_notes = val,
+            "transcription_language" => self.transcription_language = val,
             // Map llm_auth_mode to default_llm_provider
             "llm_auth_mode" => {
                 self.default_llm_provider = Some(match value {

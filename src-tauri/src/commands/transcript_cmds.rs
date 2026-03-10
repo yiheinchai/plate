@@ -103,6 +103,7 @@ pub async fn transcribe_recording(
         .unwrap_or_else(|| "local".to_string());
     let whisper_model = settings.default_whisper_model.clone();
     let openai_key = settings.openai_api_key.clone();
+    let language = settings.transcription_language.clone().unwrap_or_else(|| "auto".to_string());
     drop(settings);
 
     let audio_path = recording.file_path.clone();
@@ -115,10 +116,13 @@ pub async fn transcribe_recording(
         other => other.to_string(),
     };
 
+    // "auto" means let Whisper detect the language.
+    let lang = if language == "auto" { None } else { Some(language) };
+
     let config = TranscriptionConfig {
         audio_path,
         engine: internal_engine.clone(),
-        language: Some("en".to_string()),
+        language: lang,
         model: whisper_model.clone(),
     };
 

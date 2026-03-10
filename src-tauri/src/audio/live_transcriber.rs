@@ -36,11 +36,12 @@ impl LiveTranscriber {
         app_handle: tauri::AppHandle,
         models_dir: PathBuf,
         model_name: String,
+        language: Option<String>,
     ) -> Option<Self> {
         let (tx, rx) = mpsc::channel::<LiveMsg>();
 
         let worker = std::thread::spawn(move || {
-            Self::worker_loop(rx, app_handle, models_dir, model_name);
+            Self::worker_loop(rx, app_handle, models_dir, model_name, language);
         });
 
         Some(Self {
@@ -64,6 +65,7 @@ impl LiveTranscriber {
         app_handle: tauri::AppHandle,
         models_dir: PathBuf,
         model_name: String,
+        language: Option<String>,
     ) {
         // Ensure model is downloaded.
         let manager = ModelManager::new(models_dir.clone());
@@ -105,7 +107,7 @@ impl LiveTranscriber {
                     info!("Live transcriber stopping");
                     // Do one final transcription of any remaining audio.
                     if !pending_samples.is_empty() {
-                        if let Some(text) = Self::transcribe_chunk(&ctx, &pending_samples) {
+                        if let Some(text) = Self::transcribe_chunk(&ctx, &pending_samples, language.as_deref()) {
                             if !text.is_empty() {
                                 let _ = app_handle.emit(
                                     "transcript-chunk",
@@ -132,7 +134,7 @@ impl LiveTranscriber {
                 // Take the pending samples and transcribe just this chunk.
                 let chunk: Vec<f32> = pending_samples.drain(..).collect();
 
-                if let Some(text) = Self::transcribe_chunk(&ctx, &chunk) {
+                if let Some(text) = Self::transcribe_chunk(&ctx, &chunk, language.as_deref()) {
                     if !text.is_empty() {
                         let _ = app_handle.emit(
                             "transcript-chunk",
@@ -152,7 +154,7 @@ impl LiveTranscriber {
     }
 
     /// Run Whisper inference on an audio chunk. Returns the full text or None on error.
-    fn transcribe_chunk(ctx: &WhisperContext, samples: &[f32]) -> Option<String> {
+    fn transcribe_chunk(ctx: &WhisperContext, samples: &[f32], language: Option<&str>) -> Option<String> {
         // Dynamic range compression: boost quiet parts (distant lecturer).
         let mut compressed = samples.to_vec();
         Self::compress_dynamic_range(&mut compressed);
@@ -160,7 +162,7 @@ impl LiveTranscriber {
 
         let mut state = ctx.create_state().ok()?;
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some("en"));
+        params.set_language(language);
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
