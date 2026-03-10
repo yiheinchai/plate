@@ -153,16 +153,10 @@ impl LiveTranscriber {
 
     /// Run Whisper inference on an audio chunk. Returns the full text or None on error.
     fn transcribe_chunk(ctx: &WhisperContext, samples: &[f32]) -> Option<String> {
-        // Normalize quiet audio for better recognition.
-        let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
-        let samples_normalized;
-        let samples = if peak > 0.0 && peak < 0.1 {
-            let gain = 0.9 / peak;
-            samples_normalized = samples.iter().map(|s| (s * gain).clamp(-1.0, 1.0)).collect::<Vec<f32>>();
-            &samples_normalized
-        } else {
-            samples
-        };
+        // Dynamic range compression: boost quiet parts (distant lecturer).
+        let mut compressed = samples.to_vec();
+        Self::compress_dynamic_range(&mut compressed);
+        let samples = &compressed;
 
         let mut state = ctx.create_state().ok()?;
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -198,6 +192,36 @@ impl LiveTranscriber {
             }
         }
         Some(text)
+    }
+
+    /// Apply dynamic range compression to boost quiet segments while keeping
+    /// loud segments from clipping. Same algorithm as WhisperLocal.
+    fn compress_dynamic_range(samples: &mut [f32]) {
+        const FRAME_SIZE: usize = 320; // 20ms at 16kHz
+        const TARGET_RMS: f32 = 0.15;
+        const MAX_GAIN: f32 = 15.0;
+        const ATTACK: f32 = 0.3;
+        const RELEASE: f32 = 0.05;
+
+        if samples.is_empty() {
+            return;
+        }
+
+        let mut current_gain = 1.0f32;
+
+        for chunk in samples.chunks_mut(FRAME_SIZE) {
+            let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+            let target_gain = if rms > 0.001 {
+                (TARGET_RMS / rms).min(MAX_GAIN).max(1.0)
+            } else {
+                1.0
+            };
+            let alpha = if target_gain > current_gain { ATTACK } else { RELEASE };
+            current_gain += alpha * (target_gain - current_gain);
+            for s in chunk.iter_mut() {
+                *s = (*s * current_gain).clamp(-1.0, 1.0);
+            }
+        }
     }
 }
 

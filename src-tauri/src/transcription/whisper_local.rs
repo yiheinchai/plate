@@ -88,6 +88,46 @@ impl WhisperLocal {
 
         Ok(resampled)
     }
+
+    /// Apply dynamic range compression to boost quiet segments (e.g. a distant
+    /// lecturer) while keeping loud segments (e.g. the student's own voice)
+    /// from clipping. Operates on 20ms frames with smoothed gain transitions.
+    fn compress_dynamic_range(samples: &mut [f32]) {
+        const SAMPLE_RATE: usize = 16000;
+        const FRAME_SIZE: usize = SAMPLE_RATE / 50; // 20ms = 320 samples
+        const TARGET_RMS: f32 = 0.15;
+        const MAX_GAIN: f32 = 15.0; // max boost for very quiet frames
+        const ATTACK: f32 = 0.3;    // how fast gain increases (slow = smooth)
+        const RELEASE: f32 = 0.05;  // how fast gain decreases (fast = responsive)
+
+        if samples.is_empty() {
+            return;
+        }
+
+        let mut current_gain = 1.0f32;
+
+        for chunk in samples.chunks_mut(FRAME_SIZE) {
+            // Calculate RMS of this frame.
+            let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+
+            // Determine target gain for this frame.
+            let target_gain = if rms > 0.001 {
+                (TARGET_RMS / rms).min(MAX_GAIN).max(1.0)
+            } else {
+                // Near-silence, don't amplify noise.
+                1.0
+            };
+
+            // Smooth gain transition to avoid clicks.
+            let alpha = if target_gain > current_gain { ATTACK } else { RELEASE };
+            current_gain += alpha * (target_gain - current_gain);
+
+            // Apply gain with clipping protection.
+            for s in chunk.iter_mut() {
+                *s = (*s * current_gain).clamp(-1.0, 1.0);
+            }
+        }
+    }
 }
 
 impl TranscriptionEngine for WhisperLocal {
@@ -121,16 +161,9 @@ impl TranscriptionEngine for WhisperLocal {
         let audio_path = Path::new(&config.audio_path);
         let mut samples = Self::load_audio(audio_path)?;
 
-        // Normalize quiet audio so whisper can hear it.
-        // Find peak amplitude; if below threshold, amplify to target level.
-        let peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
-        if peak > 0.0 && peak < 0.1 {
-            let gain = 0.9 / peak;
-            info!("Audio is quiet (peak {:.4}), applying {:.1}x gain", peak, gain);
-            for s in samples.iter_mut() {
-                *s = (*s * gain).clamp(-1.0, 1.0);
-            }
-        }
+        // Dynamic range compression: boost quiet parts (distant lecturer)
+        // without over-amplifying loud parts (student's own voice).
+        Self::compress_dynamic_range(&mut samples);
 
         info!("Transcribing {} samples with model {}", samples.len(), model_name);
 
