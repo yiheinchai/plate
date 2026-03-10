@@ -1,4 +1,4 @@
-import { Clock, Copy, Check, Pencil, Search, ChevronUp, ChevronDown, X } from "lucide-react";
+import { Clock, Copy, Check, Pencil, Search, ChevronUp, ChevronDown, X, Download } from "lucide-react";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Transcript } from "../../lib/types";
 import * as tauri from "../../lib/tauri";
@@ -93,6 +93,29 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
       setTimeout(() => setCopied(false), 2000);
     } catch {
       console.error("Failed to copy");
+    }
+  };
+
+  const [exported, setExported] = useState(false);
+
+  const handleExportTranscript = async () => {
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      const lines = segments.map(
+        (s) => `**[${formatTimestamp(s.start_ms)}]** ${s.text.trim()}`
+      );
+      const md = `# Transcript\n\n${lines.join("\n\n")}`;
+      const filePath = await save({
+        defaultPath: "transcript.md",
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (!filePath) return;
+      await writeTextFile(filePath, md);
+      setExported(true);
+      setTimeout(() => setExported(false), 2000);
+    } catch (err) {
+      console.error("Export failed:", err);
     }
   };
 
@@ -231,6 +254,14 @@ export default function TranscriptViewer({ transcript, playbackTimeMs, onSeek }:
           >
             {copied ? <Check size={10} className="text-success" /> : <Copy size={10} />}
             {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            onClick={handleExportTranscript}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+            title="Export transcript as Markdown"
+          >
+            {exported ? <Check size={10} className="text-success" /> : <Download size={10} />}
+            {exported ? "Saved" : "Save"}
           </button>
         </div>
       </div>
