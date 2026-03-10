@@ -79,6 +79,8 @@ export default function LibraryPage() {
   const [audioReady, setAudioReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -285,6 +287,7 @@ export default function LibraryPage() {
     setAudioLoading(false);
     setPlaybackTime(0);
     setPlaybackDuration(0);
+    setPlaybackSpeed(1);
   }, [selectedId]);
 
   // Debounced full-text search across transcripts and notes.
@@ -542,6 +545,18 @@ export default function LibraryPage() {
               <span className="shrink-0 text-[10px] text-text-muted font-mono tabular-nums">
                 {formatDuration(playbackTime * 1000 || null)} / {formatDuration(playbackDuration * 1000 || null)}
               </span>
+              <button
+                onClick={() => {
+                  const idx = SPEED_OPTIONS.indexOf(playbackSpeed);
+                  const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
+                  setPlaybackSpeed(next);
+                  if (audioRef.current) audioRef.current.playbackRate = next;
+                }}
+                className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer min-w-[32px] text-center"
+                title="Playback speed"
+              >
+                {playbackSpeed}x
+              </button>
               <button
                 onClick={() => handleExport(selectedRecording.id)}
                 disabled={exportingId === selectedRecording.id}
