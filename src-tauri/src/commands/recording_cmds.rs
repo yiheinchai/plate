@@ -435,6 +435,91 @@ pub async fn export_recording(state: State<'_, AppState>, id: String) -> Result<
     Ok(dest.to_string_lossy().into_owned())
 }
 
+/// Import an external audio file (WAV, MP3, etc.) as a recording.
+/// Copies the file into the app's recordings directory and creates a DB entry.
+#[tauri::command]
+pub async fn import_audio(state: State<'_, AppState>, file_path: String) -> Result<RecordingRow, String> {
+    let source_path = std::path::Path::new(&file_path);
+    if !source_path.exists() {
+        return Err("File not found".to_string());
+    }
+
+    let recording_id = uuid::Uuid::new_v4().to_string();
+    let ext = source_path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("wav");
+    let dest_filename = format!("{}.{}", recording_id, ext);
+    let dest_path = state.recordings_dir().join(&dest_filename);
+
+    // Copy file to recordings directory.
+    std::fs::copy(source_path, &dest_path)
+        .map_err(|e| format!("Failed to copy audio file: {}", e))?;
+
+    // Try to read WAV metadata for duration and sample rate.
+    let (duration_ms, sample_rate) = if ext == "wav" {
+        match hound::WavReader::open(&dest_path) {
+            Ok(reader) => {
+                let spec = reader.spec();
+                let num_samples = reader.len() as u64;
+                let channels = spec.channels as u64;
+                let sr = spec.sample_rate as u64;
+                let samples_per_channel = num_samples / channels.max(1);
+                let dur_ms = (samples_per_channel * 1000) / sr.max(1);
+                (Some(dur_ms as i64), spec.sample_rate as i64)
+            }
+            Err(_) => (None, 16000i64),
+        }
+    } else {
+        (None, 16000i64)
+    };
+
+    let file_size = std::fs::metadata(&dest_path).ok().map(|m| m.len() as i64);
+
+    // Generate title from the original filename.
+    let title = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Imported Recording")
+        .to_string();
+
+    let created_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let dest_str = dest_path.to_string_lossy().into_owned();
+
+    // Save to database.
+    let db_path = state.db_path.clone();
+    let rec_id = recording_id.clone();
+    let rec_title = title.clone();
+    let file_path_db = dest_str.clone();
+    let sr = sample_rate;
+    let dur = duration_ms;
+    let fs = file_size;
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(
+            recordings::INSERT_RECORDING_SQL,
+            params![rec_id, rec_title, "imported", file_path_db, dur, sr, fs],
+        )
+        .map_err(|e| format!("Failed to insert recording: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    info!("Audio imported: {} from {}", recording_id, source_path.display());
+
+    Ok(RecordingRow {
+        id: recording_id,
+        title,
+        source_type: "imported".to_string(),
+        file_path: dest_str,
+        duration_ms,
+        sample_rate,
+        created_at,
+        file_size,
+    })
+}
+
 /// Delete a recording by ID (also removes the WAV file).
 #[tauri::command]
 pub async fn delete_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {

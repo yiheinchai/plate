@@ -20,6 +20,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -85,6 +86,7 @@ pub fn run() {
             commands::recording_cmds::rename_recording,
             commands::recording_cmds::export_recording,
             commands::recording_cmds::get_playable_audio,
+            commands::recording_cmds::import_audio,
             // Transcription
             commands::transcript_cmds::transcribe_recording,
             commands::transcript_cmds::get_transcript,

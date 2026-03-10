@@ -54,6 +54,10 @@ export async function exportRecording(id: string): Promise<string> {
   return invoke<string>("export_recording", { id });
 }
 
+export async function importAudio(filePath: string): Promise<Recording> {
+  return invoke<Recording>("import_audio", { filePath });
+}
+
 export async function getPlayableAudioUrl(id: string): Promise<string> {
   const path = await invoke<string>("get_playable_audio", { id });
   return convertFileSrc(path);

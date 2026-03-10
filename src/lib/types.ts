@@ -1,7 +1,7 @@
 export interface Recording {
   id: string;
   title: string;
-  source_type: "microphone" | "system_audio";
+  source_type: "microphone" | "system_audio" | "imported";
   file_path: string;
   duration_ms: number | null;
   sample_rate: number;

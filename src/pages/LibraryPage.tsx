@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult } from "../lib/types";
@@ -275,6 +275,25 @@ export default function LibraryPage() {
     }
   };
 
+  const handleImportAudio = async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Audio", extensions: ["wav", "mp3", "m4a", "ogg", "flac", "aac"] }],
+      });
+      if (!selected) return;
+      const filePath = typeof selected === "string" ? selected : (selected as { path: string }).path;
+      const recording = await tauri.importAudio(filePath);
+      setRecordings((prev) => [recording, ...prev]);
+      setSelectedId(recording.id);
+      setCurrentTranscript(null);
+      setDetailTab("transcript");
+    } catch (err) {
+      console.error("Import failed:", err);
+    }
+  };
+
   // Reset audio when selection changes.
   useEffect(() => {
     if (audioRef.current) {
@@ -346,6 +365,13 @@ export default function LibraryPage() {
             className="bg-bg-input border border-border-subtle rounded pl-7 pr-3 py-1 text-[12px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/60 transition-colors w-44"
           />
         </div>
+        <button
+          onClick={handleImportAudio}
+          className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          title="Import audio file"
+        >
+          <Upload size={13} />
+        </button>
         <button
           onClick={() => loadData()}
           className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
@@ -433,7 +459,9 @@ export default function LibraryPage() {
                     }`}
                   >
                     <div className="shrink-0">
-                      {isMic ? (
+                      {recording.source_type === "imported" ? (
+                        <Upload size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
+                      ) : isMic ? (
                         <Mic size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
                       ) : (
                         <Monitor size={14} className={isSelected ? "text-accent" : "text-text-muted"} />
