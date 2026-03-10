@@ -88,6 +88,7 @@ pub async fn transcribe_recording(
                     created_at: row.get(6)?,
                     file_size: row.get(7)?,
                     starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                    last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
                 })
             })
             .map_err(|e| format!("Recording not found: {}", e))

@@ -59,6 +59,10 @@ export async function importAudio(filePath: string): Promise<Recording> {
   return invoke<Recording>("import_audio", { filePath });
 }
 
+export async function updatePlaybackPosition(id: string, positionMs: number): Promise<void> {
+  return invoke<void>("update_playback_position", { id, positionMs });
+}
+
 export async function toggleStar(id: string): Promise<boolean> {
   return invoke<boolean>("toggle_star", { id });
 }

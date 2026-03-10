@@ -44,6 +44,9 @@ pub fn run() {
             let _ = conn.execute_batch(
                 "ALTER TABLE recordings ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;"
             );
+            let _ = conn.execute_batch(
+                "ALTER TABLE recordings ADD COLUMN last_position_ms INTEGER NOT NULL DEFAULT 0;"
+            );
             drop(conn);
 
             // Load settings from DB into cache.
@@ -94,6 +97,7 @@ pub fn run() {
             commands::recording_cmds::get_playable_audio,
             commands::recording_cmds::import_audio,
             commands::recording_cmds::toggle_star,
+            commands::recording_cmds::update_playback_position,
             // Transcription
             commands::transcript_cmds::transcribe_recording,
             commands::transcript_cmds::get_transcript,

@@ -304,11 +304,26 @@ export default function LibraryPage() {
     }
   };
 
+  // Save playback position to DB (debounced).
+  const positionSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savePosition = useCallback((recId: string, timeMs: number) => {
+    if (positionSaveRef.current) clearTimeout(positionSaveRef.current);
+    positionSaveRef.current = setTimeout(() => {
+      tauri.updatePlaybackPosition(recId, Math.round(timeMs)).catch(() => {});
+    }, 2000);
+  }, []);
+
   const togglePlayback = async () => {
     if (!audioRef.current || !selectedRecording) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
+      // Save position immediately on pause.
+      const posMs = Math.round(audioRef.current.currentTime * 1000);
+      tauri.updatePlaybackPosition(selectedRecording.id, posMs).catch(() => {});
+      setRecordings((prev) =>
+        prev.map((r) => r.id === selectedRecording.id ? { ...r, last_position_ms: posMs } : r)
+      );
     } else {
       if (!audioReady) {
         setAudioLoading(true);
@@ -321,6 +336,11 @@ export default function LibraryPage() {
             audioRef.current.onerror = () => reject(new Error("Audio load failed"));
           });
           setAudioReady(true);
+          // Restore saved position.
+          if (selectedRecording.last_position_ms > 0 && audioRef.current) {
+            audioRef.current.currentTime = selectedRecording.last_position_ms / 1000;
+            setPlaybackTime(selectedRecording.last_position_ms / 1000);
+          }
         } catch (err) {
           console.error("Failed to load audio:", err);
           setAudioLoading(false);
@@ -692,6 +712,11 @@ export default function LibraryPage() {
                             <span className="text-[10px] text-text-muted">
                               {formatDate(recording.created_at)}
                             </span>
+                            {recording.last_position_ms > 0 && recording.duration_ms && recording.last_position_ms < recording.duration_ms - 2000 && (
+                              <span className="text-[9px] text-accent/60">
+                                ▸ {formatDuration(recording.last_position_ms)}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -768,7 +793,12 @@ export default function LibraryPage() {
             <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle bg-bg-card">
               <audio
                 ref={audioRef}
-                onTimeUpdate={(e) => setPlaybackTime(e.currentTarget.currentTime)}
+                onTimeUpdate={(e) => {
+                  setPlaybackTime(e.currentTarget.currentTime);
+                  if (selectedRecording) {
+                    savePosition(selectedRecording.id, e.currentTarget.currentTime * 1000);
+                  }
+                }}
                 onLoadedMetadata={(e) => setPlaybackDuration(e.currentTarget.duration)}
                 onEnded={() => setIsPlaying(false)}
               />

@@ -8,6 +8,7 @@ export interface Recording {
   created_at: string;
   file_size: number | null;
   starred: boolean;
+  last_position_ms: number;
 }
 
 export interface Transcript {
