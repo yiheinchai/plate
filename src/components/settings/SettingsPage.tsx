@@ -2,6 +2,7 @@ import { Loader2, AlertCircle, Check } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import ModelProviderConfig from "./ModelProviderConfig";
 import TranscriptionConfig from "./TranscriptionConfig";
+import UpdateChecker from "./UpdateChecker";
 
 export default function SettingsPanel() {
   const { settings, isLoading, isSaving, saved, error, updateField } =
@@ -47,6 +48,8 @@ export default function SettingsPanel() {
           </label>
         </div>
       </section>
+
+      <UpdateChecker />
 
       {/* Auto-save status */}
       <div className="flex justify-end h-5">
