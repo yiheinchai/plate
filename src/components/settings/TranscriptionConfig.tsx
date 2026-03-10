@@ -38,6 +38,26 @@ export default function TranscriptionConfig({
         Transcription
       </h2>
       <div className="bg-bg-card border border-border-subtle rounded p-3 flex flex-col gap-3">
+        {/* Auto-transcribe toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[12px] text-text-secondary">Auto-transcribe</span>
+            <span className="text-[10px] text-text-muted">Automatically transcribe after recording stops</span>
+          </div>
+          <button
+            onClick={() => updateField("auto_transcribe", !settings.auto_transcribe)}
+            className={`relative w-8 h-[18px] rounded-full transition-colors cursor-pointer ${
+              settings.auto_transcribe ? "bg-accent" : "bg-white/15"
+            }`}
+          >
+            <div
+              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
+                settings.auto_transcribe ? "translate-x-[16px]" : "translate-x-[2px]"
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Engine toggle */}
         <div className="flex flex-col gap-1">
           <span className="text-[12px] text-text-secondary">Engine</span>

@@ -8,6 +8,7 @@ import TranscriptViewer from "../components/transcripts/TranscriptViewer";
 import PromptPicker from "../components/notes/PromptPicker";
 import NoteViewer from "../components/notes/NoteViewer";
 import { useNotes } from "../hooks/useNotes";
+import { useSettings } from "../hooks/useSettings";
 
 function formatDuration(ms: number | null): string {
   if (!ms || ms === 0) return "";
@@ -61,6 +62,7 @@ export default function LibraryPage() {
   } = useTranscript();
 
   const { isGenerating, error: notesError, generateNotes } = useNotes();
+  const { settings } = useSettings();
 
   const location = useLocation();
   const navState = location.state as { selectRecordingId?: string; autoTranscribe?: boolean } | null;
@@ -111,8 +113,8 @@ export default function LibraryPage() {
         setCurrentTranscript(t ?? null);
         setDetailTab("transcript");
 
-        // Auto-transcribe if needed
-        if (navState.autoTranscribe && !data.transcriptMap.has(rid)) {
+        // Auto-transcribe if requested by nav state or enabled in settings
+        if ((navState.autoTranscribe || settings.auto_transcribe) && !data.transcriptMap.has(rid)) {
           handleTranscribe(rid);
         }
       }

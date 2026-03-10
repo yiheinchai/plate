@@ -21,6 +21,7 @@ pub struct SettingsResponse {
     pub audio_sample_rate: u32,
     pub default_prompt_style: String,
     pub default_custom_prompt: String,
+    pub auto_transcribe: bool,
 }
 
 impl Default for SettingsResponse {
@@ -38,6 +39,7 @@ impl Default for SettingsResponse {
             audio_sample_rate: 16000,
             default_prompt_style: "summary".to_string(),
             default_custom_prompt: String::new(),
+            auto_transcribe: false,
         }
     }
 }
@@ -82,6 +84,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsResponse
                 }
                 "default_prompt_style" => response.default_prompt_style = value,
                 "default_custom_prompt" => response.default_custom_prompt = value,
+                "auto_transcribe" => response.auto_transcribe = value == "true",
                 _ => {}
             }
         }
@@ -114,6 +117,7 @@ pub async fn update_settings(
         ("audio_sample_rate", settings.audio_sample_rate.to_string()),
         ("default_prompt_style", settings.default_prompt_style.clone()),
         ("default_custom_prompt", settings.default_custom_prompt.clone()),
+        ("auto_transcribe", settings.auto_transcribe.to_string()),
     ];
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
@@ -160,6 +164,7 @@ pub async fn update_settings(
     cache.set("claude_organization_id", &settings.llm_organization_id);
     cache.set("default_prompt_style", &settings.default_prompt_style);
     cache.set("default_custom_prompt", &settings.default_custom_prompt);
+    cache.set("auto_transcribe", &settings.auto_transcribe.to_string());
 
     info!("Settings updated");
     Ok(())

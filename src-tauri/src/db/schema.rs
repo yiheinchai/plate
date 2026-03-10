@@ -120,6 +120,7 @@ pub struct SettingsCache {
     pub default_prompt_style: Option<String>,
     pub default_custom_prompt: Option<String>,
     pub g4f_url: Option<String>,
+    pub auto_transcribe: Option<String>,
 }
 
 impl SettingsCache {
@@ -140,6 +141,7 @@ impl SettingsCache {
             "default_prompt_style" => self.default_prompt_style = val,
             "default_custom_prompt" => self.default_custom_prompt = val,
             "g4f_url" => self.g4f_url = val,
+            "auto_transcribe" => self.auto_transcribe = val,
             // Map llm_auth_mode to default_llm_provider
             "llm_auth_mode" => {
                 self.default_llm_provider = Some(match value {

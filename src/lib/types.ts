@@ -55,6 +55,7 @@ export interface Settings {
   audio_sample_rate: number;
   default_prompt_style: string;
   default_custom_prompt: string;
+  auto_transcribe: boolean;
 }
 
 export interface SavedPrompt {
