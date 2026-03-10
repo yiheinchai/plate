@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown } from "lucide-react";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -113,6 +113,7 @@ export default function LibraryPage() {
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
   const lastClickedIdRef = useRef<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [sortBy, setSortBy] = useState<"date" | "duration" | "title">("date");
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -668,6 +669,12 @@ export default function LibraryPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter((r) => r.title.toLowerCase().includes(q));
     }
+    if (sortBy === "duration") {
+      result = [...result].sort((a, b) => (b.duration_ms ?? 0) - (a.duration_ms ?? 0));
+    } else if (sortBy === "title") {
+      result = [...result].sort((a, b) => a.title.localeCompare(b.title));
+    }
+    // "date" is the default order from the backend (newest first)
     return result;
   })();
 
@@ -778,6 +785,19 @@ export default function LibraryPage() {
         >
           <Star size={13} fill={showStarredOnly ? "currentColor" : "none"} />
         </button>
+        <div className="relative">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as "date" | "duration" | "title")}
+            className="appearance-none bg-transparent text-[10px] text-text-muted hover:text-text-secondary pl-5 pr-1 py-0.5 rounded cursor-pointer outline-none"
+            title="Sort recordings"
+          >
+            <option value="date">Newest</option>
+            <option value="duration">Longest</option>
+            <option value="title">A–Z</option>
+          </select>
+          <ArrowUpDown size={10} className="absolute left-1 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+        </div>
         <div className="flex-1" />
         <div className="relative">
           <Search
@@ -900,7 +920,7 @@ export default function LibraryPage() {
                   Searching...
                 </div>
               )}
-              {(searchQuery.trim().length >= 2
+              {(searchQuery.trim().length >= 2 || sortBy !== "date"
                 ? [{ label: "", recordings: filteredRecordings }]
                 : groupRecordingsByDate(filteredRecordings)
               ).map((group) => (
