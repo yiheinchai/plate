@@ -37,10 +37,13 @@ export function useRecording() {
     };
   }, [setAudioLevel]);
 
+  const { setRecordingWarning } = useAppStore();
+
   // Listen for recording-error events (recorder thread failed after start_recording returned)
   useEffect(() => {
     let cancelled = false;
-    let unlisten: (() => void) | null = null;
+    let unlistenError: (() => void) | null = null;
+    let unlistenWarning: (() => void) | null = null;
 
     import("@tauri-apps/api/event").then(({ listen }) => {
       listen<string>("recording-error", (event) => {
@@ -50,16 +53,26 @@ export function useRecording() {
         setCurrentRecordingId(null);
         setRecordingStartTime(null);
         setAudioLevel(0);
+        setRecordingWarning(event.payload);
       }).then((fn) => {
-        if (cancelled) { fn(); } else { unlisten = fn; }
+        if (cancelled) { fn(); } else { unlistenError = fn; }
+      });
+
+      listen<string>("recording-warning", (event) => {
+        if (cancelled) return;
+        console.warn("Recording warning:", event.payload);
+        setRecordingWarning(event.payload);
+      }).then((fn) => {
+        if (cancelled) { fn(); } else { unlistenWarning = fn; }
       });
     });
 
     return () => {
       cancelled = true;
-      unlisten?.();
+      unlistenError?.();
+      unlistenWarning?.();
     };
-  }, [setRecordingStatus, setCurrentRecordingId, setRecordingStartTime, setAudioLevel]);
+  }, [setRecordingStatus, setCurrentRecordingId, setRecordingStartTime, setAudioLevel, setRecordingWarning]);
 
   // Elapsed time timer
   useEffect(() => {
@@ -81,6 +94,8 @@ export function useRecording() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [recordingStatus, setElapsedMs]);
+
+  const { setContinuingRecording, continuingRecordingId } = useAppStore();
 
   const startRecording = useCallback(
     async (source?: AudioSource) => {
@@ -105,6 +120,31 @@ export function useRecording() {
     ]
   );
 
+  const continueRecording = useCallback(
+    async (recordingId: string, recordingTitle: string, source?: AudioSource) => {
+      const src = source ?? currentAudioSource;
+      try {
+        await tauri.continueRecording(recordingId, src);
+        setCurrentRecordingId(recordingId);
+        setRecordingStartTime(Date.now());
+        setRecordingStatus("recording");
+        setAudioSource(src);
+        setContinuingRecording(recordingId, recordingTitle);
+      } catch (err) {
+        console.error("Failed to continue recording:", err);
+        throw err;
+      }
+    },
+    [
+      currentAudioSource,
+      setCurrentRecordingId,
+      setRecordingStartTime,
+      setRecordingStatus,
+      setAudioSource,
+      setContinuingRecording,
+    ]
+  );
+
   const stopRecording = useCallback(async (): Promise<Recording> => {
     try {
       const recording = await tauri.stopRecording();
@@ -112,6 +152,7 @@ export function useRecording() {
       setCurrentRecordingId(null);
       setRecordingStartTime(null);
       setAudioLevel(0);
+      setContinuingRecording(null, null);
       return recording;
     } catch (err) {
       console.error("Failed to stop recording:", err);
@@ -122,6 +163,7 @@ export function useRecording() {
     setCurrentRecordingId,
     setRecordingStartTime,
     setAudioLevel,
+    setContinuingRecording,
   ]);
 
   const pauseRecording = useCallback(async () => {
@@ -149,7 +191,9 @@ export function useRecording() {
     currentAudioSource,
     audioLevel,
     elapsedMs,
+    continuingRecordingId,
     startRecording,
+    continueRecording,
     stopRecording,
     pauseRecording,
     resumeRecording,

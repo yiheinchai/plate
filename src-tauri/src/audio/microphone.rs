@@ -230,7 +230,9 @@ pub fn start_capture(
                 warn!("{}", msg);
                 if let Some(ref handle) = app_handle {
                     use tauri::Emitter;
-                    let _ = handle.emit("recording-error", msg.to_string());
+                    // Emit as a warning, not a recording-error — the recording is still
+                    // running and we don't want the frontend to reset state.
+                    let _ = handle.emit("recording-warning", msg.to_string());
                 }
             }
         }

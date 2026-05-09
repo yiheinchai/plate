@@ -130,6 +130,35 @@ impl WhisperLocal {
     }
 }
 
+/// Detect Whisper hallucination patterns: repeated brackets, punctuation-only
+/// segments, or known filler phrases that Whisper hallucinates during silence.
+fn is_hallucinated(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    // Only brackets/punctuation, no actual words (e.g. "[", "[ ]", "] ] ]")
+    let stripped: String = trimmed.chars().filter(|c| c.is_alphanumeric()).collect();
+    if stripped.is_empty() {
+        return true;
+    }
+    // Common Whisper hallucination phrases during silence
+    let lower = trimmed.to_lowercase();
+    let hallucinations = [
+        "thank you for watching",
+        "thanks for watching",
+        "subscribe",
+        "like and subscribe",
+        "thank you.",
+        "you",
+        "...",
+    ];
+    if hallucinations.iter().any(|h| lower.trim_matches(|c: char| !c.is_alphanumeric()) == h.trim_matches(|c: char| !c.is_alphanumeric())) {
+        return true;
+    }
+    false
+}
+
 impl TranscriptionEngine for WhisperLocal {
     fn transcribe(&self, config: &TranscriptionConfig) -> Result<TranscriptionResult> {
         let model_name = config
@@ -200,6 +229,11 @@ impl TranscriptionEngine for WhisperLocal {
             let end = state
                 .full_get_segment_t1(i)
                 .context("Failed to get segment end time")?;
+
+            // Skip hallucinated junk segments (brackets, repeated punctuation, etc.)
+            if is_hallucinated(&text) {
+                continue;
+            }
 
             // Whisper timestamps are in centiseconds (10ms units).
             segments.push(TranscriptSegment {

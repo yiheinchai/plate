@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Square, Pause, Play, Bookmark } from "lucide-react";
+import { Check, Bookmark } from "lucide-react";
 import { useRecording } from "../../hooks/useRecording";
 import { useAppStore } from "../../stores/appStore";
 import * as tauri from "../../lib/tauri";
@@ -42,9 +42,15 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
       setBookmarkCount(0);
       onStart?.();
       await startRecording();
-    } else if (onStop) {
-      await onStop();
+    } else if (isRecording) {
+      await pauseRecording();
+    } else if (isPaused) {
+      await resumeRecording();
     }
+  };
+
+  const handleDone = async () => {
+    if (onStop) await onStop();
   };
 
   const handleBookmark = async () => {
@@ -56,14 +62,6 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
       setTimeout(() => setBookmarkFlash(false), 400);
     } catch (err) {
       console.error("Failed to add bookmark:", err);
-    }
-  };
-
-  const handlePauseResume = async () => {
-    if (isRecording) {
-      await pauseRecording();
-    } else if (isPaused) {
-      await resumeRecording();
     }
   };
 
@@ -80,45 +78,48 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
 
       {/* Buttons */}
       <div className="flex items-center gap-4">
-        {/* Pause/resume */}
-        {!isIdle && (
+        {/* Done / save button — visible when paused (stopped) */}
+        {isPaused && (
           <button
-            onClick={handlePauseResume}
-            className="flex items-center justify-center w-9 h-9 rounded bg-bg-card border border-border-subtle hover:bg-bg-card-hover transition-colors cursor-pointer"
+            onClick={handleDone}
+            className="flex items-center justify-center w-9 h-9 rounded bg-accent/10 border border-accent/30 hover:bg-accent/20 transition-colors cursor-pointer"
             style={{ animation: "fade-in 0.15s ease-out" }}
-            title={isRecording ? "Pause" : "Resume"}
+            title="Finish & save recording"
           >
-            {isRecording ? (
-              <Pause size={14} className="text-text-secondary" />
-            ) : (
-              <Play size={14} className="text-text-secondary ml-0.5" />
-            )}
+            <Check size={14} className="text-accent" />
           </button>
         )}
 
-        {/* Main record/stop button */}
+        {/* Main record button: start / pause / resume */}
         <button
           onClick={handleMainButton}
           className={`relative flex items-center justify-center w-14 h-14 rounded-full transition-all cursor-pointer ${
             isIdle
               ? "bg-record hover:bg-record-hover"
-              : "bg-record hover:bg-record-hover"
+              : isPaused
+                ? "bg-record/70 hover:bg-record"
+                : "bg-record hover:bg-record-hover"
           }`}
           style={
             isRecording
               ? { animation: "pulse-record 2s ease-in-out infinite" }
               : {}
           }
-          title={isIdle ? "Start recording" : "Stop recording"}
+          title={isIdle ? "Start recording" : isRecording ? "Stop recording" : "Resume recording"}
         >
           {isIdle ? (
             <span className="w-4 h-4 rounded-full bg-white/90" />
+          ) : isRecording ? (
+            <span className="w-3.5 h-3.5 rounded-sm bg-white/90" />
           ) : (
-            <Square
-              size={16}
-              className="text-white/90"
-              fill="rgba(255,255,255,0.9)"
-              strokeWidth={0}
+            /* Paused — show play triangle */
+            <span
+              className="w-0 h-0 ml-0.5"
+              style={{
+                borderLeft: "8px solid rgba(255,255,255,0.9)",
+                borderTop: "5px solid transparent",
+                borderBottom: "5px solid transparent",
+              }}
             />
           )}
         </button>
@@ -155,11 +156,16 @@ export default function RecordingControls({ onStop, onStart }: RecordingControls
         >
           {isIdle && "Ready"}
           {isRecording && "Recording"}
-          {isPaused && "Paused"}
+          {isPaused && "Stopped"}
         </span>
         {isIdle && (
           <span className="text-[10px] text-text-muted/50 mt-0.5">
             Press Space to start
+          </span>
+        )}
+        {isPaused && (
+          <span className="text-[10px] text-text-muted/50 mt-0.5">
+            Press Space to resume
           </span>
         )}
         {!isIdle && bookmarkCount > 0 && (

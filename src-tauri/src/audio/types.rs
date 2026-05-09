@@ -43,6 +43,8 @@ pub struct RecordingState {
     pub done_rx: Option<tokio::sync::oneshot::Receiver<()>>,
     /// Accumulated duration in milliseconds (updated periodically).
     pub duration_ms: u64,
+    /// When continuing an existing recording, holds the original recording ID.
+    pub continuing_id: Option<String>,
 }
 
 impl Default for RecordingState {
@@ -55,6 +57,7 @@ impl Default for RecordingState {
             stop_tx: None,
             done_rx: None,
             duration_ms: 0,
+            continuing_id: None,
         }
     }
 }

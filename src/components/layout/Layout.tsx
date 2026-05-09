@@ -8,7 +8,7 @@ import * as tauri from "../../lib/tauri";
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { recordingStatus, startRecording, stopRecording, elapsedMs } = useRecording();
+  const { recordingStatus, startRecording, stopRecording, pauseRecording, resumeRecording, elapsedMs } = useRecording();
   const { currentRecordingId } = useAppStore();
 
   const handleKeyDown = useCallback(
@@ -17,16 +17,15 @@ export default function Layout() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      // Space on Record page: toggle recording
+      // Space on Record page: toggle recording (start/pause/resume)
       if (e.code === "Space" && location.pathname === "/") {
         e.preventDefault();
         if (recordingStatus === "idle") {
           await startRecording();
+        } else if (recordingStatus === "paused") {
+          await resumeRecording();
         } else {
-          const recording = await stopRecording();
-          navigate("/library", {
-            state: { selectRecordingId: recording.id, autoTranscribe: true },
-          });
+          await pauseRecording();
         }
         return;
       }
@@ -52,7 +51,7 @@ export default function Layout() {
         }
       }
     },
-    [recordingStatus, startRecording, stopRecording, navigate, location.pathname, currentRecordingId, elapsedMs]
+    [recordingStatus, startRecording, stopRecording, pauseRecording, resumeRecording, navigate, location.pathname, currentRecordingId, elapsedMs]
   );
 
   useEffect(() => {

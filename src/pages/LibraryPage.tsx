@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useLocation } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown, Plus } from "lucide-react";
+import { useRecording } from "../hooks/useRecording";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
 import type { Recording, Transcript, Note, SearchResult, Bookmark as BookmarkType } from "../lib/types";
@@ -87,6 +88,8 @@ export default function LibraryPage() {
 
   const { isGenerating, error: notesError, generateNotes } = useNotes();
   const { settings } = useSettings();
+  const navigate = useNavigate();
+  const { continueRecording } = useRecording();
 
   const location = useLocation();
   const navState = location.state as { selectRecordingId?: string; autoTranscribe?: boolean } | null;
@@ -128,7 +131,10 @@ export default function LibraryPage() {
       ]);
       setRecordings(recs);
       const tMap = new Map<string, Transcript>();
-      transcripts.forEach((t) => tMap.set(t.recording_id, t));
+      // Transcripts are ordered newest-first (DESC); keep only the newest per recording.
+      transcripts.forEach((t) => {
+        if (!tMap.has(t.recording_id)) tMap.set(t.recording_id, t);
+      });
       setTranscriptMap(tMap);
       return { recordings: recs, transcriptMap: tMap };
     } catch (err) {
@@ -1183,6 +1189,18 @@ export default function LibraryPage() {
               >
                 <Download size={10} />
                 {exportingId === selectedRecording.id ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={async () => {
+                  const src = selectedRecording.source_type === "system_audio" ? "system_audio" : "microphone";
+                  await continueRecording(selectedRecording.id, selectedRecording.title, src as "microphone" | "system_audio");
+                  navigate("/");
+                }}
+                className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-accent hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                title="Continue recording — append more audio"
+              >
+                <Plus size={10} />
+                Continue
               </button>
             </div>
 

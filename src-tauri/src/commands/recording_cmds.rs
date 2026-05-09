@@ -85,6 +85,104 @@ pub async fn start_recording(
     Ok(recording_id)
 }
 
+/// Continue an existing recording — starts a new capture that will be appended on stop.
+#[tauri::command]
+pub async fn continue_recording(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    source: String,
+) -> Result<String, String> {
+    let mut rec_state = state.recording.lock().await;
+
+    if rec_state.status != RecorderStatus::Idle {
+        return Err("A recording is already in progress".to_string());
+    }
+
+    // Verify the recording exists in the DB.
+    let db_path = state.db_path.clone();
+    let check_id = id.clone();
+    let existing: RecordingRow = tokio::task::spawn_blocking(move || -> Result<RecordingRow, String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.query_row(recordings::SELECT_RECORDING_BY_ID_SQL, params![check_id], |row| {
+            Ok(RecordingRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                source_type: row.get(2)?,
+                file_path: row.get(3)?,
+                duration_ms: row.get(4)?,
+                sample_rate: row.get(5)?,
+                created_at: row.get(6)?,
+                file_size: row.get(7)?,
+                starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+            })
+        })
+        .map_err(|e| format!("Recording not found: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    let audio_source = match source.as_str() {
+        "microphone" => AudioSource::Microphone,
+        "system_audio" => AudioSource::SystemAudio,
+        "both" => AudioSource::Both,
+        _ => return Err(format!("Unknown source: {}", source)),
+    };
+
+    let sr = existing.sample_rate as u32;
+    // Write to a temp file; we'll concatenate on stop.
+    let temp_id = uuid::Uuid::new_v4().to_string();
+    let temp_filename = format!("{}_continue.wav", temp_id);
+    let output_path = state.recordings_dir().join(&temp_filename);
+
+    let config = RecordingConfig {
+        source: audio_source.clone(),
+        device_name: None,
+        sample_rate: Some(sr),
+    };
+
+    let (stop_tx, stop_rx) = watch::channel(false);
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+
+    rec_state.status = RecorderStatus::Recording;
+    rec_state.source = Some(audio_source);
+    rec_state.output_path = Some(output_path.clone());
+    rec_state.sample_rate = sr;
+    rec_state.stop_tx = Some(stop_tx);
+    rec_state.done_rx = Some(done_rx);
+    rec_state.duration_ms = 0;
+    rec_state.continuing_id = Some(id.clone());
+
+    let models_dir = state.models_dir();
+    let recorder = Recorder::new(config, output_path, app_handle.clone(), models_dir);
+    let recording_state = state.recording.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let result = recorder.run_blocking(stop_rx);
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let mut rs = recording_state.lock().await;
+            rs.status = RecorderStatus::Idle;
+            rs.stop_tx = None;
+            rs.source = None;
+            if let Ok(ref res) = result {
+                rs.duration_ms = res.duration_ms;
+            }
+        });
+        if let Err(ref e) = result {
+            error!("Recorder failed: {}", e);
+            let _ = app_handle.emit("recording-error", e.to_string());
+        }
+        let _ = done_tx.send(());
+        result
+    });
+
+    info!("Continuing recording: {}", id);
+    Ok(id)
+}
+
 /// Stop the current recording, save it to the database, and return a Recording object.
 #[tauri::command]
 pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, String> {
@@ -109,7 +207,8 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         .unwrap_or_default();
     let sample_rate = rec_state.sample_rate;
     let source = rec_state.source.clone().unwrap_or(AudioSource::Microphone);
-    let duration_ms = rec_state.duration_ms;
+    let new_duration_ms = rec_state.duration_ms;
+    let continuing_id = rec_state.continuing_id.take();
 
     // Extract the recording ID from the filename (filename is {id}.wav).
     let recording_id = std::path::Path::new(&output_path)
@@ -128,6 +227,123 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         let _ = rx.await;
     }
 
+    // If continuing an existing recording, concatenate audio files.
+    if let Some(ref orig_id) = continuing_id {
+        let db_path = state.db_path.clone();
+        let oid = orig_id.clone();
+        let existing: RecordingRow = tokio::task::spawn_blocking({
+            let db = db_path.clone();
+            move || -> Result<RecordingRow, String> {
+                let conn = rusqlite::Connection::open(&db)
+                    .map_err(|e| format!("Failed to open database: {}", e))?;
+                conn.query_row(recordings::SELECT_RECORDING_BY_ID_SQL, params![oid], |row| {
+                    Ok(RecordingRow {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        source_type: row.get(2)?,
+                        file_path: row.get(3)?,
+                        duration_ms: row.get(4)?,
+                        sample_rate: row.get(5)?,
+                        created_at: row.get(6)?,
+                        file_size: row.get(7)?,
+                        starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                        last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                    })
+                })
+                .map_err(|e| format!("Original recording not found: {}", e))
+            }
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))??;
+
+        let orig_path = existing.file_path.clone();
+        let new_path = output_path.clone();
+        let sr = sample_rate;
+
+        // Concatenate: read original + new, write combined to original path.
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let orig_reader = hound::WavReader::open(&orig_path)
+                .map_err(|e| format!("Failed to open original WAV: {}", e))?;
+            let new_reader = hound::WavReader::open(&new_path)
+                .map_err(|e| format!("Failed to open new WAV: {}", e))?;
+
+            let orig_samples: Vec<f32> = orig_reader
+                .into_samples::<f32>()
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to read original samples: {}", e))?;
+            let new_samples: Vec<f32> = new_reader
+                .into_samples::<f32>()
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to read new samples: {}", e))?;
+
+            let spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: sr,
+                bits_per_sample: 32,
+                sample_format: hound::SampleFormat::Float,
+            };
+            let mut writer = hound::WavWriter::create(&orig_path, spec)
+                .map_err(|e| format!("Failed to create combined WAV: {}", e))?;
+            for &s in &orig_samples {
+                writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+            }
+            for &s in &new_samples {
+                writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+            }
+            writer.finalize().map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+
+            // Delete the temp file.
+            let _ = std::fs::remove_file(&new_path);
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))??;
+
+        // Compute updated duration and file size.
+        let orig_dur = existing.duration_ms.unwrap_or(0) as u64;
+        let total_dur = orig_dur + new_duration_ms;
+        let file_size = std::fs::metadata(&existing.file_path)
+            .ok()
+            .map(|m| m.len() as i64);
+
+        // Update DB.
+        let db_path2 = state.db_path.clone();
+        let uid = orig_id.clone();
+        let dur = total_dur as i64;
+        let fs = file_size;
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let conn = rusqlite::Connection::open(&db_path2)
+                .map_err(|e| format!("Failed to open database: {}", e))?;
+            conn.execute(recordings::UPDATE_RECORDING_DURATION_SQL, params![uid, dur, fs])
+                .map_err(|e| format!("Failed to update recording: {}", e))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Task join error: {}", e))??;
+
+        // Clear cached playable audio so it gets re-generated.
+        let cache_path = state.data_dir.join("audio_cache").join(format!("{}.wav", orig_id));
+        let _ = std::fs::remove_file(&cache_path);
+
+        info!("Recording continued and saved: {}", orig_id);
+
+        return Ok(RecordingRow {
+            id: existing.id,
+            title: existing.title,
+            source_type: existing.source_type,
+            file_path: existing.file_path,
+            duration_ms: Some(total_dur as i64),
+            sample_rate: existing.sample_rate,
+            created_at: existing.created_at,
+            file_size,
+            starred: existing.starred,
+            last_position_ms: existing.last_position_ms,
+        });
+    }
+
+    // ── Normal (new) recording path ──
+
     // Generate a human-readable title.
     let now = chrono::Local::now();
     let title = format!("Recording {}", now.format("%Y-%m-%d %H:%M"));
@@ -145,7 +361,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
     let source_str = source.to_string();
     let file_path = output_path.clone();
     let sr = sample_rate as i64;
-    let dur = duration_ms as i64;
+    let dur = new_duration_ms as i64;
     let fs = file_size;
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
@@ -168,7 +384,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         title,
         source_type: source.to_string(),
         file_path: output_path,
-        duration_ms: Some(duration_ms as i64),
+        duration_ms: Some(new_duration_ms as i64),
         sample_rate: sample_rate as i64,
         created_at,
         file_size,

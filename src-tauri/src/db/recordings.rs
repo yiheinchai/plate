@@ -43,3 +43,6 @@ pub const DELETE_RECORDING_SQL: &str = "DELETE FROM recordings WHERE id = ?1";
 
 /// SQL for updating the title of a recording.
 pub const UPDATE_RECORDING_TITLE_SQL: &str = "UPDATE recordings SET title = ?2 WHERE id = ?1";
+
+/// SQL for updating duration and file size after continuing a recording.
+pub const UPDATE_RECORDING_DURATION_SQL: &str = "UPDATE recordings SET duration_ms = ?2, file_size = ?3 WHERE id = ?1";

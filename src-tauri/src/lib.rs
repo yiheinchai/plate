@@ -85,6 +85,7 @@ pub fn run() {
             commands::audio_cmds::get_audio_level,
             // Recording
             commands::recording_cmds::start_recording,
+            commands::recording_cmds::continue_recording,
             commands::recording_cmds::stop_recording,
             commands::recording_cmds::pause_recording,
             commands::recording_cmds::resume_recording,

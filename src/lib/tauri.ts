@@ -23,6 +23,10 @@ export async function startRecording(source: AudioSource): Promise<string> {
   return invoke<string>("start_recording", { source });
 }
 
+export async function continueRecording(id: string, source: AudioSource): Promise<string> {
+  return invoke<string>("continue_recording", { id, source });
+}
+
 export async function stopRecording(): Promise<Recording> {
   return invoke<Recording>("stop_recording");
 }
