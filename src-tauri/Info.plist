@@ -4,5 +4,9 @@
 <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>Plate needs microphone access to record lectures.</string>
+    <key>NSAppSleepDisabled</key>
+    <true/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
 </dict>
 </plist>

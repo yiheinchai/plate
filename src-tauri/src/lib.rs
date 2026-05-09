@@ -79,6 +79,21 @@ pub fn run() {
             tracing::info!("Plate app initialized");
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(true) = event {
+                // When the window regains focus, check if the WebView content process
+                // is still alive. macOS can kill it during App Nap / memory pressure,
+                // leaving a blank screen.
+                for webview in window.webviews() {
+                    let check = webview.eval(
+                        "if(!document.getElementById('root')?.children?.length){window.location.reload()}"
+                    );
+                    if check.is_err() {
+                        let _ = webview.reload();
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Audio
             commands::audio_cmds::list_audio_devices,
