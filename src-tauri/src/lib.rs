@@ -47,6 +47,9 @@ pub fn run() {
             let _ = conn.execute_batch(
                 "ALTER TABLE recordings ADD COLUMN last_position_ms INTEGER NOT NULL DEFAULT 0;"
             );
+            let _ = conn.execute_batch(
+                "ALTER TABLE recordings ADD COLUMN deleted_at TEXT;"
+            );
             drop(conn);
 
             // Load settings from DB into cache.
@@ -108,6 +111,9 @@ pub fn run() {
             commands::recording_cmds::list_recordings,
             commands::recording_cmds::get_recording,
             commands::recording_cmds::delete_recording,
+            commands::recording_cmds::restore_recording,
+            commands::recording_cmds::purge_recording,
+            commands::recording_cmds::list_deleted_recordings,
             commands::recording_cmds::rename_recording,
             commands::recording_cmds::export_recording,
             commands::recording_cmds::get_playable_audio,

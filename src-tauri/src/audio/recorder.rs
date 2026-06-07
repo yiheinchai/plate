@@ -45,7 +45,8 @@ impl Recorder {
     ///
     /// `stop_rx` is a watch channel receiver — when the value becomes `true`,
     /// the recording stops and the WAV file is finalized.
-    pub fn run_blocking(&self, stop_rx: watch::Receiver<bool>) -> Result<RecordingResult> {
+    /// `pause_rx` signals pause/resume — when `true`, samples are discarded.
+    pub fn run_blocking(&self, stop_rx: watch::Receiver<bool>, pause_rx: watch::Receiver<bool>) -> Result<RecordingResult> {
         let rb = HeapRb::<f32>::new(RING_BUFFER_SIZE);
         let (producer, mut consumer) = rb.split();
 
@@ -128,29 +129,38 @@ impl Recorder {
 
             let count = consumer.pop_slice(&mut buf);
             if count > 0 {
-                for &sample in &buf[..count] {
-                    writer.write_sample(sample)?;
-                    total_samples += 1;
-                    level_sum_sq += sample * sample;
-                    level_samples += 1;
-                }
-
-                // Feed samples to live transcriber.
-                if let Some(ref lt) = live_transcriber {
-                    lt.push_samples(&buf[..count]);
-                }
-
-                // Emit audio level periodically.
-                if level_samples >= level_interval {
-                    let rms = (level_sum_sq / level_samples as f32).sqrt();
-                    // Normalize to 0..1 range (clamp at reasonable max).
-                    let level = (rms * 5.0).min(1.0);
+                let paused = *pause_rx.borrow();
+                if paused {
+                    // Discard samples while paused — don't write to WAV or transcribe.
+                    // Emit zero level so the UI shows silence.
                     let _ = self.app_handle.emit(
                         "audio-level",
-                        serde_json::json!({ "level": level }),
+                        serde_json::json!({ "level": 0.0 }),
                     );
-                    level_sum_sq = 0.0;
-                    level_samples = 0;
+                } else {
+                    for &sample in &buf[..count] {
+                        writer.write_sample(sample)?;
+                        total_samples += 1;
+                        level_sum_sq += sample * sample;
+                        level_samples += 1;
+                    }
+
+                    // Feed samples to live transcriber.
+                    if let Some(ref lt) = live_transcriber {
+                        lt.push_samples(&buf[..count]);
+                    }
+
+                    // Emit audio level periodically.
+                    if level_samples >= level_interval {
+                        let rms = (level_sum_sq / level_samples as f32).sqrt();
+                        let level = (rms * 5.0).min(1.0);
+                        let _ = self.app_handle.emit(
+                            "audio-level",
+                            serde_json::json!({ "level": level }),
+                        );
+                        level_sum_sq = 0.0;
+                        level_samples = 0;
+                    }
                 }
             } else {
                 // No data available — sleep briefly to avoid busy-waiting.

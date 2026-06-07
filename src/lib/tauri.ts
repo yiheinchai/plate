@@ -51,6 +51,18 @@ export async function deleteRecording(id: string): Promise<void> {
   return invoke<void>("delete_recording", { id });
 }
 
+export async function restoreRecording(id: string): Promise<void> {
+  return invoke<void>("restore_recording", { id });
+}
+
+export async function purgeRecording(id: string): Promise<void> {
+  return invoke<void>("purge_recording", { id });
+}
+
+export async function listDeletedRecordings(): Promise<Recording[]> {
+  return invoke<Recording[]>("list_deleted_recordings");
+}
+
 export async function renameRecording(id: string, title: string): Promise<void> {
   return invoke<void>("rename_recording", { id, title });
 }

@@ -43,6 +43,7 @@ pub async fn start_recording(
     };
 
     let (stop_tx, stop_rx) = watch::channel(false);
+    let (pause_tx, pause_rx) = watch::channel(false);
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
 
     rec_state.status = RecorderStatus::Recording;
@@ -50,6 +51,7 @@ pub async fn start_recording(
     rec_state.output_path = Some(output_path.clone());
     rec_state.sample_rate = sr;
     rec_state.stop_tx = Some(stop_tx);
+    rec_state.pause_tx = Some(pause_tx);
     rec_state.done_rx = Some(done_rx);
     rec_state.duration_ms = 0;
 
@@ -59,13 +61,14 @@ pub async fn start_recording(
     let recording_state = state.recording.clone();
 
     tokio::task::spawn_blocking(move || {
-        let result = recorder.run_blocking(stop_rx);
+        let result = recorder.run_blocking(stop_rx, pause_rx);
         // When the recorder finishes, reset state.
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async {
             let mut rs = recording_state.lock().await;
             rs.status = RecorderStatus::Idle;
             rs.stop_tx = None;
+            rs.pause_tx = None;
             rs.source = None;
             if let Ok(ref res) = result {
                 rs.duration_ms = res.duration_ms;
@@ -117,6 +120,7 @@ pub async fn continue_recording(
                 file_size: row.get(7)?,
                 starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                 last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                deleted_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
@@ -144,6 +148,7 @@ pub async fn continue_recording(
     };
 
     let (stop_tx, stop_rx) = watch::channel(false);
+    let (pause_tx, pause_rx) = watch::channel(false);
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
 
     rec_state.status = RecorderStatus::Recording;
@@ -151,6 +156,7 @@ pub async fn continue_recording(
     rec_state.output_path = Some(output_path.clone());
     rec_state.sample_rate = sr;
     rec_state.stop_tx = Some(stop_tx);
+    rec_state.pause_tx = Some(pause_tx);
     rec_state.done_rx = Some(done_rx);
     rec_state.duration_ms = 0;
     rec_state.continuing_id = Some(id.clone());
@@ -160,12 +166,13 @@ pub async fn continue_recording(
     let recording_state = state.recording.clone();
 
     tokio::task::spawn_blocking(move || {
-        let result = recorder.run_blocking(stop_rx);
+        let result = recorder.run_blocking(stop_rx, pause_rx);
         let rt = tokio::runtime::Handle::current();
         rt.block_on(async {
             let mut rs = recording_state.lock().await;
             rs.status = RecorderStatus::Idle;
             rs.stop_tx = None;
+            rs.pause_tx = None;
             rs.source = None;
             if let Ok(ref res) = result {
                 rs.duration_ms = res.duration_ms;
@@ -248,6 +255,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
                         file_size: row.get(7)?,
                         starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                         last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                        deleted_at: row.get(10)?,
                     })
                 })
                 .map_err(|e| format!("Original recording not found: {}", e))
@@ -339,6 +347,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
             file_size,
             starred: existing.starred,
             last_position_ms: existing.last_position_ms,
+            deleted_at: None,
         });
     }
 
@@ -390,6 +399,7 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         file_size,
         starred: false,
         last_position_ms: 0,
+        deleted_at: None,
     })
 }
 
@@ -402,6 +412,9 @@ pub async fn pause_recording(state: State<'_, AppState>) -> Result<(), String> {
         return Err("No active recording to pause".to_string());
     }
 
+    if let Some(ref pause_tx) = rec_state.pause_tx {
+        let _ = pause_tx.send(true);
+    }
     rec_state.status = RecorderStatus::Paused;
     info!("Recording paused");
     Ok(())
@@ -416,6 +429,9 @@ pub async fn resume_recording(state: State<'_, AppState>) -> Result<(), String> 
         return Err("No paused recording to resume".to_string());
     }
 
+    if let Some(ref pause_tx) = rec_state.pause_tx {
+        let _ = pause_tx.send(false);
+    }
     rec_state.status = RecorderStatus::Recording;
     info!("Recording resumed");
     Ok(())
@@ -457,6 +473,7 @@ pub async fn list_recordings(state: State<'_, AppState>) -> Result<Vec<Recording
                     file_size: row.get(7)?,
                     starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                     last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                    deleted_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Failed to query recordings: {}", e))?;
@@ -491,6 +508,7 @@ pub async fn get_recording(state: State<'_, AppState>, id: String) -> Result<Rec
                 file_size: row.get(7)?,
                 starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                 last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                deleted_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
@@ -546,6 +564,7 @@ pub async fn get_playable_audio(state: State<'_, AppState>, id: String) -> Resul
                     file_size: row.get(7)?,
                     starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                     last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                    deleted_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Recording not found: {}", e))
@@ -633,6 +652,7 @@ pub async fn export_recording(state: State<'_, AppState>, id: String) -> Result<
                 file_size: row.get(7)?,
                 starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
                 last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                deleted_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Recording not found: {}", e))
@@ -745,6 +765,7 @@ pub async fn import_audio(state: State<'_, AppState>, file_path: String) -> Resu
         file_size,
         starred: false,
         last_position_ms: 0,
+        deleted_at: None,
     })
 }
 
@@ -787,7 +808,7 @@ pub async fn update_playback_position(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Delete a recording by ID (also removes the WAV file).
+/// Soft-delete a recording by ID (moves to trash).
 #[tauri::command]
 pub async fn delete_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let db_path = state.db_path.clone();
@@ -795,8 +816,39 @@ pub async fn delete_recording(state: State<'_, AppState>, id: String) -> Result<
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         let conn = rusqlite::Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(recordings::SOFT_DELETE_RECORDING_SQL, params![id])
+            .map_err(|e| format!("Failed to delete recording: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
 
-        // First get the file path so we can delete the file.
+/// Restore a soft-deleted recording from trash.
+#[tauri::command]
+pub async fn restore_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(recordings::RESTORE_RECORDING_SQL, params![id])
+            .map_err(|e| format!("Failed to restore recording: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Permanently delete a recording (removes DB row and WAV file).
+#[tauri::command]
+pub async fn purge_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+
         let file_path: Option<String> = conn
             .query_row(
                 recordings::SELECT_RECORDING_BY_ID_SQL,
@@ -805,16 +857,53 @@ pub async fn delete_recording(state: State<'_, AppState>, id: String) -> Result<
             )
             .ok();
 
-        // Delete from database.
-        conn.execute(recordings::DELETE_RECORDING_SQL, params![id])
-            .map_err(|e| format!("Failed to delete recording: {}", e))?;
+        conn.execute(recordings::HARD_DELETE_RECORDING_SQL, params![id])
+            .map_err(|e| format!("Failed to purge recording: {}", e))?;
 
-        // Delete the WAV file if it exists.
         if let Some(path) = file_path {
             let _ = std::fs::remove_file(&path);
         }
 
         Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// List all soft-deleted recordings (trash).
+#[tauri::command]
+pub async fn list_deleted_recordings(state: State<'_, AppState>) -> Result<Vec<RecordingRow>, String> {
+    let db_path = state.db_path.clone();
+
+    tokio::task::spawn_blocking(move || -> Result<Vec<RecordingRow>, String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        let mut stmt = conn
+            .prepare(recordings::SELECT_DELETED_RECORDINGS_SQL)
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(RecordingRow {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    source_type: row.get(2)?,
+                    file_path: row.get(3)?,
+                    duration_ms: row.get(4)?,
+                    sample_rate: row.get(5)?,
+                    created_at: row.get(6)?,
+                    file_size: row.get(7)?,
+                    starred: row.get::<_, i64>(8).unwrap_or(0) != 0,
+                    last_position_ms: row.get::<_, i64>(9).unwrap_or(0),
+                    deleted_at: row.get(10)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query recordings: {}", e))?;
+
+        let mut recordings = Vec::new();
+        for row in rows {
+            recordings.push(row.map_err(|e| format!("Failed to read row: {}", e))?);
+        }
+        Ok(recordings)
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

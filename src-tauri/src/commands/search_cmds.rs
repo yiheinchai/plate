@@ -39,7 +39,7 @@ pub async fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Sea
         {
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, title FROM recordings WHERE LOWER(title) LIKE ?1 ORDER BY created_at DESC LIMIT 20",
+                    "SELECT id, title FROM recordings WHERE deleted_at IS NULL AND LOWER(title) LIKE ?1 ORDER BY created_at DESC LIMIT 20",
                 )
                 .map_err(|e| format!("Query error: {}", e))?;
             let rows = stmt
@@ -68,7 +68,7 @@ pub async fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Sea
                     "SELECT t.recording_id, r.title, t.full_text
                      FROM transcripts t
                      JOIN recordings r ON r.id = t.recording_id
-                     WHERE LOWER(t.full_text) LIKE ?1
+                     WHERE r.deleted_at IS NULL AND LOWER(t.full_text) LIKE ?1
                      ORDER BY t.created_at DESC LIMIT 20",
                 )
                 .map_err(|e| format!("Query error: {}", e))?;
@@ -105,7 +105,7 @@ pub async fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Sea
                      FROM notes n
                      JOIN transcripts t ON t.id = n.transcript_id
                      JOIN recordings r ON r.id = t.recording_id
-                     WHERE LOWER(n.title) LIKE ?1 OR LOWER(n.content) LIKE ?1
+                     WHERE r.deleted_at IS NULL AND (LOWER(n.title) LIKE ?1 OR LOWER(n.content) LIKE ?1)
                      ORDER BY n.created_at DESC LIMIT 20",
                 )
                 .map_err(|e| format!("Query error: {}", e))?;

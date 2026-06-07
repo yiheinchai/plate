@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown, Plus } from "lucide-react";
+import { Search, RefreshCw, Trash2, Mic, Monitor, Clock, Play, Pause, Download, Upload, FileAudio, Bookmark, X, Zap, Star, HelpCircle, Check, ArrowUpDown, Plus, RotateCcw, AlertTriangle } from "lucide-react";
 import { useRecording } from "../hooks/useRecording";
 import { useTranscript } from "../hooks/useTranscript";
 import * as tauri from "../lib/tauri";
@@ -119,8 +119,11 @@ export default function LibraryPage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
   const lastClickedIdRef = useRef<string | null>(null);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleting] = useState(false);
   const [sortBy, setSortBy] = useState<"date" | "duration" | "title">("date");
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; fromTrash?: boolean } | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedRecordings, setTrashedRecordings] = useState<Recording[]>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -294,19 +297,55 @@ export default function LibraryPage() {
     }
   };
 
-  const handleDeleteRecording = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteRecording = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await tauri.deleteRecording(id);
-      setRecordings((prev) => prev.filter((r) => r.id !== id));
-      if (selectedId === id) {
-        setSelectedId(null);
-        setCurrentTranscript(null);
-        setViewingNote(null);
+    setConfirmDelete({ ids: [id] });
+  };
+
+  const executeDelete = async (ids: string[]) => {
+    for (const id of ids) {
+      try {
+        await tauri.deleteRecording(id);
+      } catch (err) {
+        console.error("Failed to delete recording:", err);
       }
-    } catch (err) {
-      console.error("Failed to delete recording:", err);
     }
+    setRecordings((prev) => prev.filter((r) => !ids.includes(r.id)));
+    if (selectedId && ids.includes(selectedId)) {
+      setSelectedId(null);
+      setCurrentTranscript(null);
+      setViewingNote(null);
+    }
+  };
+
+  const loadTrash = async () => {
+    try {
+      const deleted = await tauri.listDeletedRecordings();
+      setTrashedRecordings(deleted);
+    } catch (err) {
+      console.error("Failed to load trash:", err);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      await tauri.restoreRecording(id);
+      setTrashedRecordings((prev) => prev.filter((r) => r.id !== id));
+      loadData();
+    } catch (err) {
+      console.error("Failed to restore recording:", err);
+    }
+  };
+
+  const handlePurge = async (ids: string[]) => {
+    for (const id of ids) {
+      try {
+        await tauri.purgeRecording(id);
+      } catch (err) {
+        console.error("Failed to purge recording:", err);
+      }
+    }
+    setTrashedRecordings((prev) => prev.filter((r) => !ids.includes(r.id)));
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -358,25 +397,9 @@ export default function LibraryPage() {
     handleSelect(recording);
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (multiSelected.size === 0 || bulkDeleting) return;
-    setBulkDeleting(true);
-    const ids = [...multiSelected];
-    for (const id of ids) {
-      try {
-        await tauri.deleteRecording(id);
-      } catch (err) {
-        console.error("Failed to delete recording:", id, err);
-      }
-    }
-    setRecordings((prev) => prev.filter((r) => !multiSelected.has(r.id)));
-    if (selectedId && multiSelected.has(selectedId)) {
-      setSelectedId(null);
-      setCurrentTranscript(null);
-      setViewingNote(null);
-    }
-    setMultiSelected(new Set());
-    setBulkDeleting(false);
+    setConfirmDelete({ ids: [...multiSelected] });
   };
 
   const handleBulkTranscribe = async () => {
@@ -875,6 +898,13 @@ export default function LibraryPage() {
           title="Import audio file"
         >
           <Upload size={13} />
+        </button>
+        <button
+          onClick={() => { setShowTrash(true); loadTrash(); }}
+          className="flex items-center justify-center w-6 h-6 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+          title="Trash"
+        >
+          <Trash2 size={13} />
         </button>
         <button
           onClick={() => loadData()}
@@ -1435,6 +1465,112 @@ export default function LibraryPage() {
           </div>
         )}
       </div>
+
+      {/* Confirmation dialog */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setConfirmDelete(null)}>
+          <div className="bg-bg-card border border-border-subtle rounded-lg shadow-xl p-5 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} className="text-record" />
+              <h3 className="text-[13px] font-semibold text-text-primary">
+                {confirmDelete.fromTrash ? "Permanently delete" : "Move to trash"}?
+              </h3>
+            </div>
+            <p className="text-[12px] text-text-muted mb-4">
+              {confirmDelete.fromTrash
+                ? `This will permanently delete ${confirmDelete.ids.length === 1 ? "this recording" : `${confirmDelete.ids.length} recordings`} and the audio file. This cannot be undone.`
+                : `${confirmDelete.ids.length === 1 ? "This recording" : `${confirmDelete.ids.length} recordings`} will be moved to trash. You can restore ${confirmDelete.ids.length === 1 ? "it" : "them"} later.`
+              }
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-3 py-1.5 rounded text-[12px] font-medium text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const { ids, fromTrash } = confirmDelete;
+                  setConfirmDelete(null);
+                  if (fromTrash) {
+                    await handlePurge(ids);
+                  } else {
+                    await executeDelete(ids);
+                    setMultiSelected(new Set());
+                  }
+                }}
+                className="px-3 py-1.5 rounded text-[12px] font-medium bg-record/15 text-record hover:bg-record/25 transition-colors cursor-pointer"
+              >
+                {confirmDelete.fromTrash ? "Delete forever" : "Move to trash"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trash modal */}
+      {showTrash && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowTrash(false)}>
+          <div className="bg-bg-card border border-border-subtle rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
+              <div className="flex items-center gap-2">
+                <Trash2 size={14} className="text-text-muted" />
+                <h3 className="text-[13px] font-semibold text-text-primary">Trash</h3>
+                <span className="text-[11px] text-text-muted">({trashedRecordings.length})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {trashedRecordings.length > 0 && (
+                  <button
+                    onClick={() => setConfirmDelete({ ids: trashedRecordings.map((r) => r.id), fromTrash: true })}
+                    className="text-[11px] font-medium text-record hover:text-record/80 transition-colors cursor-pointer"
+                  >
+                    Empty trash
+                  </button>
+                )}
+                <button onClick={() => setShowTrash(false)} className="p-1 rounded text-text-muted hover:text-text-secondary hover:bg-white/5 transition-colors cursor-pointer">
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {trashedRecordings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-text-muted">
+                  <Trash2 size={24} strokeWidth={1} className="mb-2 opacity-30" />
+                  <p className="text-[12px]">Trash is empty</p>
+                </div>
+              ) : (
+                trashedRecordings.map((rec) => (
+                  <div key={rec.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.03] transition-colors group">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-medium text-text-primary truncate">{rec.title}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-text-muted">{formatDate(rec.created_at)}</span>
+                        {rec.duration_ms && <span className="text-[10px] text-text-muted">{formatDuration(rec.duration_ms)}</span>}
+                        {rec.deleted_at && <span className="text-[10px] text-text-muted/60">Deleted {formatDate(rec.deleted_at)}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRestore(rec.id)}
+                      className="p-1.5 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-accent hover:bg-accent/10 transition-all cursor-pointer"
+                      title="Restore"
+                    >
+                      <RotateCcw size={12} />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete({ ids: [rec.id], fromTrash: true })}
+                      className="p-1.5 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-record hover:bg-record/10 transition-all cursor-pointer"
+                      title="Delete forever"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

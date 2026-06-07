@@ -9,6 +9,7 @@ export interface Recording {
   file_size: number | null;
   starred: boolean;
   last_position_ms: number;
+  deleted_at: string | null;
 }
 
 export interface Transcript {
