@@ -5,9 +5,14 @@ pub mod llm;
 pub mod state;
 pub mod transcription;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 use state::AppState;
 use tracing_subscriber::EnvFilter;
+
+static LAST_UNFOCUSED: AtomicU64 = AtomicU64::new(0);
+const FORCE_RELOAD_AFTER_SECS: u64 = 20 * 60;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -83,18 +88,48 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(true) = event {
-                // When the window regains focus, check if the WebView content process
-                // is still alive. macOS can kill it during App Nap / memory pressure,
-                // leaving a blank screen.
-                for webview in window.webviews() {
-                    let check = webview.eval(
-                        "if(!document.getElementById('root')?.children?.length){window.location.reload()}"
-                    );
-                    if check.is_err() {
-                        let _ = webview.reload();
+            match event {
+                tauri::WindowEvent::Focused(false) => {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    LAST_UNFOCUSED.store(now, Ordering::Relaxed);
+                }
+                tauri::WindowEvent::Focused(true) => {
+                    let unfocused_at = LAST_UNFOCUSED.load(Ordering::Relaxed);
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let idle_secs = if unfocused_at > 0 {
+                        now.saturating_sub(unfocused_at)
+                    } else {
+                        0
+                    };
+
+                    for webview in window.webviews() {
+                        if idle_secs >= FORCE_RELOAD_AFTER_SECS {
+                            // After extended idle, the WKWebView content process is
+                            // likely killed by macOS jetsam. eval() silently no-ops
+                            // and reload() can't restart a dead process. navigate()
+                            // forces a fresh page load with a new content process.
+                            if let Ok(url) = webview.url() {
+                                let _ = webview.navigate(url);
+                            }
+                        } else {
+                            let check = webview.eval(
+                                "if(!document.getElementById('root')?.children?.length){window.location.reload()}"
+                            );
+                            if check.is_err() {
+                                if let Ok(url) = webview.url() {
+                                    let _ = webview.navigate(url);
+                                }
+                            }
+                        }
                     }
                 }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
