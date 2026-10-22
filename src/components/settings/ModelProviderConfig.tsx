@@ -1,6 +1,7 @@
-import { Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
-import type { Settings } from "../../lib/types";
+import { Eye, EyeOff, Terminal, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import * as tauri from "../../lib/tauri";
+import type { Settings, CliToolInfo } from "../../lib/types";
 
 interface ModelProviderConfigProps {
   settings: Settings;
@@ -8,6 +9,7 @@ interface ModelProviderConfigProps {
 }
 
 const AUTH_MODES = [
+  { id: "cli" as const, label: "Local CLI" },
   { id: "g4f" as const, label: "Free" },
   { id: "api_key" as const, label: "API Key" },
   { id: "session_token" as const, label: "Token" },
@@ -37,20 +39,34 @@ export default function ModelProviderConfig({
 }: ModelProviderConfigProps) {
   const [showToken, setShowToken] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [cliTools, setCliTools] = useState<CliToolInfo[]>([]);
+
+  useEffect(() => {
+    tauri
+      .listAvailableClis()
+      .then(setCliTools)
+      .catch(() => setCliTools([]));
+  }, []);
 
   const handleModeChange = (mode: Settings["llm_auth_mode"]) => {
     updateField("llm_auth_mode", mode);
-    if (mode === "g4f") {
+    if (mode === "cli") {
+      updateField("llm_model", "auto");
+    } else if (mode === "g4f") {
       updateField("llm_model", "openai");
     } else if (
       settings.llm_model === "openai" ||
-      FREE_MODELS.some((m) => m.value === settings.llm_model)
+      settings.llm_model === "auto" ||
+      FREE_MODELS.some((m) => m.value === settings.llm_model) ||
+      cliTools.some((c) => c.id === settings.llm_model)
     ) {
       updateField("llm_model", "claude-sonnet-4-6");
     }
   };
 
+  const isCliMode = settings.llm_auth_mode === "cli";
   const isFreeMode = settings.llm_auth_mode === "g4f";
+  const installedClis = cliTools.filter((c) => c.installed);
   const models = isFreeMode ? FREE_MODELS : CLAUDE_MODELS;
 
   return (
@@ -78,6 +94,59 @@ export default function ModelProviderConfig({
             ))}
           </div>
         </div>
+
+        {/* Local CLI mode info & selector */}
+        {isCliMode && (
+          <div className="flex flex-col gap-2.5">
+            <div className="bg-accent/5 border border-accent/15 rounded px-2.5 py-1.5 flex items-start gap-2">
+              <Terminal size={13} className="text-accent shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                <p className="text-[11px] text-accent/90">
+                  Uses your existing authenticated CLI tools (Claude, Antigravity, Cursor, Pi, Codex) for notes & titles.
+                </p>
+                {installedClis.length > 0 ? (
+                  <p className="text-[10px] text-text-muted flex items-center gap-1 flex-wrap mt-0.5">
+                    <Check size={10} className="text-success shrink-0" />
+                    Detected:{" "}
+                    {installedClis.map((c) => c.id).join(", ")}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-record mt-0.5">
+                    No supported CLI detected in PATH (~/.local/bin, /opt/homebrew/bin).
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-[12px] text-text-secondary">CLI Tool</span>
+              <select
+                value={
+                  settings.llm_model === "auto" ||
+                  cliTools.some((c) => c.id === settings.llm_model)
+                    ? settings.llm_model
+                    : "auto"
+                }
+                onChange={(e) => updateField("llm_model", e.target.value)}
+                className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+              >
+                <option value="auto">
+                  Auto (First available
+                  {installedClis.length > 0 ? ` — ${installedClis[0].id}` : ""})
+                </option>
+                {cliTools.map((cli) => (
+                  <option
+                    key={cli.id}
+                    value={cli.id}
+                    disabled={!cli.installed}
+                  >
+                    {cli.name} {cli.installed ? "✓" : "(not installed)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
 
         {/* Free mode info */}
         {isFreeMode && (
@@ -140,20 +209,22 @@ export default function ModelProviderConfig({
         )}
 
         {/* Model */}
-        <label className="flex flex-col gap-1">
-          <span className="text-[12px] text-text-secondary">Model</span>
-          <select
-            value={settings.llm_model}
-            onChange={(e) => updateField("llm_model", e.target.value)}
-            className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
-          >
-            {models.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!isCliMode && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] text-text-secondary">Model</span>
+            <select
+              value={settings.llm_model}
+              onChange={(e) => updateField("llm_model", e.target.value)}
+              className="bg-bg-input border border-border-subtle rounded px-2.5 py-1.5 text-[12px] text-text-primary outline-none focus:border-accent/40 transition-colors"
+            >
+              {models.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {/* Advanced free mode */}
         {isFreeMode && (

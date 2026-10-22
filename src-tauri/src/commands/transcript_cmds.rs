@@ -8,6 +8,7 @@ use crate::db::transcripts;
 use crate::state::AppState;
 use crate::transcription::engine::TranscriptionEngine;
 use crate::transcription::model_manager::ModelManager;
+use crate::transcription::phonon_local::PhononLocal;
 use crate::transcription::types::{TranscriptionConfig, TranscriptionResult, WhisperModelInfo};
 use crate::transcription::whisper_api::WhisperApi;
 use crate::transcription::whisper_local::WhisperLocal;
@@ -138,8 +139,18 @@ pub async fn transcribe_recording(
         tokio::task::spawn_blocking(move || -> Result<TranscriptionResult, String> {
             match eng.as_str() {
                 "local" => {
-                    let engine = WhisperLocal::new(md).with_app_handle(ah);
-                    engine.transcribe(&config).map_err(|e| e.to_string())
+                    let is_phonon = config
+                        .model
+                        .as_deref()
+                        .map(ModelManager::is_phonon_model)
+                        .unwrap_or(false);
+                    if is_phonon {
+                        let engine = PhononLocal::new(md).with_app_handle(ah);
+                        engine.transcribe(&config).map_err(|e| e.to_string())
+                    } else {
+                        let engine = WhisperLocal::new(md).with_app_handle(ah);
+                        engine.transcribe(&config).map_err(|e| e.to_string())
+                    }
                 }
                 "api" => {
                     let api_key = okey.ok_or("OpenAI API key not configured")?;
@@ -338,8 +349,18 @@ pub async fn transcribe_audio(
     let result = tokio::task::spawn_blocking(move || -> Result<TranscriptionResult, String> {
         match engine.as_str() {
             "local" => {
-                let engine = WhisperLocal::new(models_dir);
-                engine.transcribe(&config).map_err(|e| e.to_string())
+                let is_phonon = config
+                    .model
+                    .as_deref()
+                    .map(ModelManager::is_phonon_model)
+                    .unwrap_or(false);
+                if is_phonon {
+                    let engine = PhononLocal::new(models_dir);
+                    engine.transcribe(&config).map_err(|e| e.to_string())
+                } else {
+                    let engine = WhisperLocal::new(models_dir);
+                    engine.transcribe(&config).map_err(|e| e.to_string())
+                }
             }
             "api" => {
                 let api_key = openai_key.ok_or("OpenAI API key not configured")?;

@@ -10,6 +10,8 @@ pub enum LlmProviderType {
     ClaudeSession,
     /// gpt4free — free, no API key needed.
     G4f,
+    /// Local AI CLI installed on the machine (claude, agy, cursor, pi, codex, etc.).
+    Cli,
 }
 
 impl std::fmt::Display for LlmProviderType {
@@ -18,6 +20,7 @@ impl std::fmt::Display for LlmProviderType {
             LlmProviderType::ClaudeApi => write!(f, "claude_api"),
             LlmProviderType::ClaudeSession => write!(f, "claude_session"),
             LlmProviderType::G4f => write!(f, "g4f"),
+            LlmProviderType::Cli => write!(f, "cli"),
         }
     }
 }

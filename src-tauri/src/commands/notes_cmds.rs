@@ -3,8 +3,10 @@ use tauri::State;
 use tracing::info;
 
 use crate::db::notes;
+use crate::db::recordings;
 use crate::db::schema::{NoteRow, TranscriptRow};
 use crate::db::transcripts;
+use crate::llm::cli::CliToolInfo;
 use crate::llm::note_generator;
 use crate::llm::types::{LlmProviderType, NoteGenerationRequest};
 use crate::state::AppState;
@@ -53,7 +55,14 @@ pub async fn generate_notes(
     let llm_provider_str = settings
         .default_llm_provider
         .clone()
-        .unwrap_or_else(|| "g4f".to_string());
+        .unwrap_or_else(|| {
+            if crate::llm::cli::first_installed_cli_id().is_some() {
+                "cli".to_string()
+            } else {
+                "g4f".to_string()
+            }
+        });
+    let llm_model = settings.llm_model.clone().filter(|s| !s.is_empty());
     let prompt_style = prompt_style
         .or_else(|| settings.default_prompt_style.clone())
         .unwrap_or_else(|| "summary".to_string());
@@ -63,8 +72,9 @@ pub async fn generate_notes(
     drop(settings);
 
     info!(
-        "generate_notes: provider={}, session_key={}, api_key={}",
+        "generate_notes: provider={}, model={:?}, session_key={}, api_key={}",
         llm_provider_str,
+        llm_model,
         session_key.as_deref().map(|s| if s.is_empty() { "empty" } else { "set" }).unwrap_or("none"),
         api_key.as_deref().map(|s| if s.is_empty() { "empty" } else { "set" }).unwrap_or("none"),
     );
@@ -73,7 +83,8 @@ pub async fn generate_notes(
         "claude_api" => LlmProviderType::ClaudeApi,
         "claude_session" => LlmProviderType::ClaudeSession,
         "g4f" => LlmProviderType::G4f,
-        _ => LlmProviderType::ClaudeApi,
+        "cli" => LlmProviderType::Cli,
+        _ => LlmProviderType::Cli,
     };
 
     let request = NoteGenerationRequest {
@@ -82,7 +93,7 @@ pub async fn generate_notes(
         prompt_style: prompt_style.clone(),
         custom_prompt,
         provider: provider_type,
-        model: None,
+        model: llm_model,
     };
 
     let result = tokio::task::spawn_blocking(move || {
@@ -345,4 +356,76 @@ pub async fn delete_saved_prompt(state: State<'_, AppState>, id: String) -> Resu
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// List supported local AI CLI tools and whether they are installed on this machine.
+#[tauri::command]
+pub async fn list_available_clis() -> Result<Vec<CliToolInfo>, String> {
+    tokio::task::spawn_blocking(crate::llm::cli::list_available_clis)
+        .await
+        .map_err(|e| format!("Task join error: {}", e))
+}
+
+/// Generate a short descriptive recording title from transcript text using the configured AI / CLI provider,
+/// save it to the database, and return the new title.
+#[tauri::command]
+pub async fn generate_recording_title(
+    state: State<'_, AppState>,
+    recording_id: String,
+    transcript_text: String,
+) -> Result<String, String> {
+    let settings = state.settings.read().await;
+    let llm_provider_str = settings
+        .default_llm_provider
+        .clone()
+        .unwrap_or_else(|| {
+            if crate::llm::cli::first_installed_cli_id().is_some() {
+                "cli".to_string()
+            } else {
+                "g4f".to_string()
+            }
+        });
+    let llm_model = settings.llm_model.clone().filter(|s| !s.is_empty());
+    let api_key = settings.anthropic_api_key.clone();
+    let session_key = settings.claude_session_key.clone();
+    let g4f_url = settings.g4f_url.clone();
+    drop(settings);
+
+    let provider_type = match llm_provider_str.as_str() {
+        "claude_api" => LlmProviderType::ClaudeApi,
+        "claude_session" => LlmProviderType::ClaudeSession,
+        "g4f" => LlmProviderType::G4f,
+        "cli" => LlmProviderType::Cli,
+        _ => LlmProviderType::Cli,
+    };
+
+    let text = transcript_text.clone();
+    let title = tokio::task::spawn_blocking(move || {
+        note_generator::generate_title_only(
+            &text,
+            &provider_type,
+            llm_model,
+            api_key.as_deref(),
+            session_key.as_deref(),
+            g4f_url.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .map_err(|e| format!("Failed to generate title: {:#}", e))?;
+
+    let db_path = state.db_path.clone();
+    let rid = recording_id.clone();
+    let new_title = title.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        conn.execute(recordings::UPDATE_RECORDING_TITLE_SQL, params![rid, new_title])
+            .map_err(|e| format!("Failed to update recording title: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    Ok(title)
 }

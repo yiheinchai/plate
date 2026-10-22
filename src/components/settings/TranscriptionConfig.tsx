@@ -9,11 +9,12 @@ interface TranscriptionConfigProps {
 }
 
 const MODEL_OPTIONS = [
-  { value: "ggml-tiny.en", label: "Tiny (~39M) — Fastest" },
-  { value: "ggml-base.en", label: "Base (~74M) — Recommended" },
-  { value: "ggml-small.en", label: "Small (~244M) — Better accuracy" },
-  { value: "ggml-medium.en", label: "Medium (~769M) — High accuracy" },
-  { value: "ggml-large-v3", label: "Large (~1.5G) — Best accuracy" },
+  { value: "phonon-2", label: "Phonon-2 (~187M) — Fast & Accurate (EN)" },
+  { value: "ggml-tiny.en", label: "Whisper Tiny (~39M) — Fastest" },
+  { value: "ggml-base.en", label: "Whisper Base (~74M) — Balanced" },
+  { value: "ggml-small.en", label: "Whisper Small (~244M) — Better accuracy" },
+  { value: "ggml-medium.en", label: "Whisper Medium (~769M) — High accuracy" },
+  { value: "ggml-large-v3", label: "Whisper Large (~1.5G) — Multilingual" },
 ];
 
 export default function TranscriptionConfig({
@@ -142,10 +143,10 @@ export default function TranscriptionConfig({
           </div>
         </div>
 
-        {/* Local Whisper model */}
+        {/* Local model */}
         {settings.transcription_engine === "whisper_local" && (
           <div className="flex flex-col gap-1">
-            <span className="text-[12px] text-text-secondary">Whisper Model</span>
+            <span className="text-[12px] text-text-secondary">Local Model</span>
             <select
               value={settings.whisper_model}
               onChange={(e) => updateField("whisper_model", e.target.value)}

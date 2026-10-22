@@ -5,8 +5,16 @@ import type { Note } from "../lib/types";
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingTranscriptIds, setGeneratingTranscriptIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  const isGenerating = generatingTranscriptIds.size > 0;
+  const isGeneratingForTranscript = useCallback(
+    (transcriptId: string | null | undefined) =>
+      !!transcriptId && generatingTranscriptIds.has(transcriptId),
+    [generatingTranscriptIds]
+  );
+  const clearError = useCallback(() => setError(null), []);
 
   const generateNotes = useCallback(
     async (
@@ -14,7 +22,11 @@ export function useNotes() {
       promptStyle?: string,
       customPrompt?: string
     ) => {
-    setIsGenerating(true);
+    setGeneratingTranscriptIds((prev) => {
+      const next = new Set(prev);
+      next.add(transcriptId);
+      return next;
+    });
     setError(null);
     try {
       const note = await tauri.generateNotes(transcriptId, promptStyle, customPrompt);
@@ -39,7 +51,11 @@ export function useNotes() {
       setError(message);
       throw err;
     } finally {
-      setIsGenerating(false);
+      setGeneratingTranscriptIds((prev) => {
+        const next = new Set(prev);
+        next.delete(transcriptId);
+        return next;
+      });
     }
   }, []);
 
@@ -89,7 +105,10 @@ export function useNotes() {
     notes,
     currentNote,
     isGenerating,
+    generatingTranscriptIds,
+    isGeneratingForTranscript,
     error,
+    clearError,
     generateNotes,
     loadNotes,
     loadNote,

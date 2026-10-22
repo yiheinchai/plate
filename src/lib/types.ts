@@ -54,7 +54,7 @@ export type AudioSource = "microphone" | "system_audio";
 export type RecordingStatus = "idle" | "recording" | "paused";
 
 export interface Settings {
-  llm_auth_mode: "session_token" | "api_key" | "g4f";
+  llm_auth_mode: "cli" | "session_token" | "api_key" | "g4f";
   llm_session_token: string;
   llm_organization_id: string;
   llm_api_key: string;
@@ -69,6 +69,13 @@ export interface Settings {
   auto_transcribe: boolean;
   auto_generate_notes: boolean;
   transcription_language: string;
+}
+
+export interface CliToolInfo {
+  id: string;
+  name: string;
+  binary_path: string | null;
+  installed: boolean;
 }
 
 export interface SavedPrompt {

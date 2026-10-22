@@ -3,11 +3,58 @@ use tauri::{Emitter, State};
 use tokio::sync::watch;
 use tracing::{error, info};
 
-use crate::audio::recorder::Recorder;
+use crate::audio::recorder::{sample_to_i16, Recorder};
 use crate::audio::types::{AudioSource, RecorderStatus, RecordingConfig};
 use crate::db::recordings;
 use crate::db::schema::RecordingRow;
 use crate::state::AppState;
+
+fn append_wav_as_i16(
+    path: &std::path::Path,
+    writer: &mut hound::WavWriter<std::io::BufWriter<std::fs::File>>,
+    sample_rate: u32,
+    channels: u16,
+) -> Result<u64, String> {
+    let mut reader = hound::WavReader::open(path)
+        .map_err(|e| format!("Failed to open WAV {}: {}", path.display(), e))?;
+    let spec = reader.spec();
+    if spec.sample_rate != sample_rate || spec.channels != channels {
+        return Err(format!(
+            "Audio format mismatch for {}: expected {} Hz/{} channels, found {} Hz/{} channels",
+            path.display(), sample_rate, channels, spec.sample_rate, spec.channels
+        ));
+    }
+
+    let mut written = 0u64;
+    match (spec.sample_format, spec.bits_per_sample) {
+        (hound::SampleFormat::Float, _) => {
+            for sample in reader.samples::<f32>() {
+                let value = sample.map_err(|e| format!("Failed to read float sample: {}", e))?;
+                writer.write_sample(sample_to_i16(value))
+                    .map_err(|e| format!("Failed to write combined sample: {}", e))?;
+                written += 1;
+            }
+        }
+        (hound::SampleFormat::Int, 16) => {
+            for sample in reader.samples::<i16>() {
+                writer.write_sample(
+                    sample.map_err(|e| format!("Failed to read 16-bit sample: {}", e))?
+                ).map_err(|e| format!("Failed to write combined sample: {}", e))?;
+                written += 1;
+            }
+        }
+        (hound::SampleFormat::Int, bits) => {
+            let scale = (1i64 << (bits - 1)) as f32;
+            for sample in reader.samples::<i32>() {
+                let value = sample.map_err(|e| format!("Failed to read integer sample: {}", e))?;
+                writer.write_sample(sample_to_i16(value as f32 / scale))
+                    .map_err(|e| format!("Failed to write combined sample: {}", e))?;
+                written += 1;
+            }
+        }
+    }
+    Ok(written)
+}
 
 /// Start a recording with the given configuration.
 #[tauri::command]
@@ -57,7 +104,17 @@ pub async fn start_recording(
 
     // Spawn the recorder on a blocking thread.
     let models_dir = state.models_dir();
-    let recorder = Recorder::new(config, output_path, app_handle.clone(), models_dir);
+    let live_model = {
+        let settings = state.settings.read().await;
+        match settings.default_whisper_model.as_deref() {
+            Some(m) if crate::transcription::model_manager::ModelManager::is_phonon_model(m) => {
+                m.to_string()
+            }
+            _ => "ggml-tiny.en".to_string(),
+        }
+    };
+    let recorder = Recorder::new(config, output_path, app_handle.clone(), models_dir)
+        .with_live_model(live_model);
     let recording_state = state.recording.clone();
 
     tokio::task::spawn_blocking(move || {
@@ -162,7 +219,17 @@ pub async fn continue_recording(
     rec_state.continuing_id = Some(id.clone());
 
     let models_dir = state.models_dir();
-    let recorder = Recorder::new(config, output_path, app_handle.clone(), models_dir);
+    let live_model = {
+        let settings = state.settings.read().await;
+        match settings.default_whisper_model.as_deref() {
+            Some(m) if crate::transcription::model_manager::ModelManager::is_phonon_model(m) => {
+                m.to_string()
+            }
+            _ => "ggml-tiny.en".to_string(),
+        }
+    };
+    let recorder = Recorder::new(config, output_path, app_handle.clone(), models_dir)
+        .with_live_model(live_model);
     let recording_state = state.recording.clone();
 
     tokio::task::spawn_blocking(move || {
@@ -214,7 +281,6 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         .unwrap_or_default();
     let sample_rate = rec_state.sample_rate;
     let source = rec_state.source.clone().unwrap_or(AudioSource::Microphone);
-    let new_duration_ms = rec_state.duration_ms;
     let continuing_id = rec_state.continuing_id.take();
 
     // Extract the recording ID from the filename (filename is {id}.wav).
@@ -233,6 +299,10 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
     if let Some(rx) = done_rx {
         let _ = rx.await;
     }
+
+    // The recorder publishes its final duration immediately before signalling
+    // done. Reading it earlier stored zero for every completed recording.
+    let new_duration_ms = state.recording.lock().await.duration_ms;
 
     // If continuing an existing recording, concatenate audio files.
     if let Some(ref orig_id) = continuing_id {
@@ -268,40 +338,56 @@ pub async fn stop_recording(state: State<'_, AppState>) -> Result<RecordingRow, 
         let new_path = output_path.clone();
         let sr = sample_rate;
 
-        // Concatenate: read original + new, write combined to original path.
+        // Concatenate transactionally into a 16-bit temporary WAV. The
+        // original is not replaced until the combined file is finalized.
         tokio::task::spawn_blocking(move || -> Result<(), String> {
-            let orig_reader = hound::WavReader::open(&orig_path)
+            let orig_spec = hound::WavReader::open(&orig_path)
                 .map_err(|e| format!("Failed to open original WAV: {}", e))?;
-            let new_reader = hound::WavReader::open(&new_path)
+            let orig_spec = orig_spec.spec();
+            let new_spec = hound::WavReader::open(&new_path)
                 .map_err(|e| format!("Failed to open new WAV: {}", e))?;
-
-            let orig_samples: Vec<f32> = orig_reader
-                .into_samples::<f32>()
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| format!("Failed to read original samples: {}", e))?;
-            let new_samples: Vec<f32> = new_reader
-                .into_samples::<f32>()
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| format!("Failed to read new samples: {}", e))?;
+            let new_spec = new_spec.spec();
+            if orig_spec.sample_rate != sr || new_spec.sample_rate != sr {
+                return Err("Cannot continue recordings with mismatched sample rates".to_string());
+            }
+            if orig_spec.channels != new_spec.channels {
+                return Err("Cannot continue recordings with mismatched channel counts".to_string());
+            }
 
             let spec = hound::WavSpec {
-                channels: 1,
+                channels: orig_spec.channels,
                 sample_rate: sr,
-                bits_per_sample: 32,
-                sample_format: hound::SampleFormat::Float,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
             };
-            let mut writer = hound::WavWriter::create(&orig_path, spec)
+            let combined_path = std::path::PathBuf::from(format!(
+                "{}.{}.combine.tmp", orig_path, uuid::Uuid::new_v4()
+            ));
+            let mut writer = hound::WavWriter::create(&combined_path, spec)
                 .map_err(|e| format!("Failed to create combined WAV: {}", e))?;
-            for &s in &orig_samples {
-                writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+
+            let combine_result = (|| -> Result<(), String> {
+                append_wav_as_i16(
+                    std::path::Path::new(&orig_path), &mut writer, sr, orig_spec.channels
+                )?;
+                append_wav_as_i16(
+                    std::path::Path::new(&new_path), &mut writer, sr, orig_spec.channels
+                )?;
+                writer.finalize()
+                    .map_err(|e| format!("Failed to finalize combined WAV: {}", e))?;
+                std::fs::rename(&combined_path, &orig_path)
+                    .map_err(|e| format!("Failed to replace original WAV: {}", e))?;
+                Ok(())
+            })();
+
+            if let Err(error) = combine_result {
+                let _ = std::fs::remove_file(&combined_path);
+                return Err(error);
             }
-            for &s in &new_samples {
-                writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
-            }
-            writer.finalize().map_err(|e| format!("Failed to finalize WAV: {}", e))?;
 
             // Delete the temp file.
-            let _ = std::fs::remove_file(&new_path);
+            std::fs::remove_file(&new_path)
+                .map_err(|e| format!("Combined audio saved but temp cleanup failed: {}", e))?;
 
             Ok(())
         })
@@ -537,14 +623,11 @@ pub async fn rename_recording(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Get a browser-playable (16-bit PCM) version of a recording's WAV file.
-/// Converts 32-bit float WAV to 16-bit PCM in a temp directory and returns the path.
+/// Get a browser-playable version of a recording's WAV file.
+/// Native 16-bit recordings are returned directly without a duplicate cache file.
 #[tauri::command]
 pub async fn get_playable_audio(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let db_path = state.db_path.clone();
-    let cache_dir = state.data_dir.join("audio_cache");
-    std::fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Failed to create audio cache dir: {}", e))?;
 
     let recording: RecordingRow = tokio::task::spawn_blocking({
         let db = db_path.clone();
@@ -573,25 +656,35 @@ pub async fn get_playable_audio(state: State<'_, AppState>, id: String) -> Resul
     .await
     .map_err(|e| format!("Task join error: {}", e))??;
 
+    let source_path = recording.file_path.clone();
+    let direct_path = source_path.clone();
+    let is_directly_playable = tokio::task::spawn_blocking(move || -> Result<bool, String> {
+        let reader = hound::WavReader::open(&direct_path)
+            .map_err(|e| format!("Failed to open WAV: {}", e))?;
+        let spec = reader.spec();
+        Ok(spec.sample_format == hound::SampleFormat::Int && spec.bits_per_sample == 16)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))??;
+
+    if is_directly_playable {
+        return Ok(source_path);
+    }
+
+    let cache_dir = state.data_dir.join("audio_cache");
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create audio cache dir: {}", e))?;
     let cached_path = cache_dir.join(format!("{}.wav", id));
     if cached_path.exists() {
         return Ok(cached_path.to_string_lossy().into_owned());
     }
 
-    let source_path = recording.file_path.clone();
     let dest = cached_path.clone();
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         let reader = hound::WavReader::open(&source_path)
             .map_err(|e| format!("Failed to open WAV: {}", e))?;
         let spec = reader.spec();
-
-        // If already 16-bit PCM, just copy the file.
-        if spec.sample_format == hound::SampleFormat::Int && spec.bits_per_sample == 16 {
-            std::fs::copy(&source_path, &dest)
-                .map_err(|e| format!("Failed to copy: {}", e))?;
-            return Ok(());
-        }
 
         // Convert to 16-bit PCM.
         let out_spec = hound::WavSpec {
@@ -844,6 +937,7 @@ pub async fn restore_recording(state: State<'_, AppState>, id: String) -> Result
 #[tauri::command]
 pub async fn purge_recording(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let db_path = state.db_path.clone();
+    let cache_path = state.data_dir.join("audio_cache").join(format!("{}.wav", id));
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
         let conn = rusqlite::Connection::open(&db_path)
@@ -863,6 +957,7 @@ pub async fn purge_recording(state: State<'_, AppState>, id: String) -> Result<(
         if let Some(path) = file_path {
             let _ = std::fs::remove_file(&path);
         }
+        let _ = std::fs::remove_file(&cache_path);
 
         Ok(())
     })

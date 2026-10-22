@@ -40,7 +40,7 @@ function formatDate(dateStr: string): string {
 }
 
 function isAutoTitle(title: string): boolean {
-  return /^Recording \d{4}-\d{2}-\d{2}/.test(title);
+  return /^(Recording|Recovered recording) \d{4}-\d{2}-\d{2}/i.test(title);
 }
 
 function getDateGroup(dateStr: string): string {
@@ -80,16 +80,28 @@ export default function LibraryPage() {
   const {
     currentTranscript,
     isTranscribing,
+    isRecordingTranscribing,
     transcriptionProgress,
     downloadProgress,
     transcribeRecording,
     setCurrentTranscript,
   } = useTranscript();
 
-  const { isGenerating, error: notesError, generateNotes } = useNotes();
+  const {
+    isGenerating,
+    isGeneratingForTranscript,
+    error: notesError,
+    clearError: clearNotesError,
+    generateNotes,
+  } = useNotes();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const { continueRecording } = useRecording();
+
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+  const recordingsRef = useRef<Recording[]>([]);
+  recordingsRef.current = recordings;
 
   const location = useLocation();
   const navState = location.state as { selectRecordingId?: string; autoTranscribe?: boolean } | null;
@@ -115,6 +127,8 @@ export default function LibraryPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchAiProgress, setBatchAiProgress] = useState<{ current: number; total: number } | null>(null);
+  const [noteTranscriptIds, setNoteTranscriptIds] = useState<Set<string>>(new Set());
   const [showStarredOnly, setShowStarredOnly] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
@@ -128,9 +142,10 @@ export default function LibraryPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [recs, transcripts] = await Promise.all([
+      const [recs, transcripts, allNotes] = await Promise.all([
         tauri.listRecordings(),
         tauri.listTranscripts(),
+        tauri.listNotes(),
       ]);
       setRecordings(recs);
       const tMap = new Map<string, Transcript>();
@@ -139,6 +154,7 @@ export default function LibraryPage() {
         if (!tMap.has(t.recording_id)) tMap.set(t.recording_id, t);
       });
       setTranscriptMap(tMap);
+      setNoteTranscriptIds(new Set(allNotes.map((n) => n.transcript_id)));
       return { recordings: recs, transcriptMap: tMap };
     } catch (err) {
       console.error("Failed to load library data:", err);
@@ -156,6 +172,7 @@ export default function LibraryPage() {
       if (navState?.selectRecordingId && handledNavState.current !== navState.selectRecordingId) {
         handledNavState.current = navState.selectRecordingId;
         const rid = navState.selectRecordingId;
+        selectedIdRef.current = rid;
         setSelectedId(rid);
         const t = data.transcriptMap.get(rid);
         setCurrentTranscript(t ?? null);
@@ -171,28 +188,51 @@ export default function LibraryPage() {
 
   // Load notes when transcript changes
   useEffect(() => {
+    let cancelled = false;
     if (currentTranscript) {
-      tauri.listNotes(currentTranscript.id).then(setRecordingNotes).catch(console.error);
+      const targetTranscriptId = currentTranscript.id;
+      tauri
+        .listNotes(targetTranscriptId)
+        .then((notes) => {
+          if (!cancelled) setRecordingNotes(notes);
+        })
+        .catch(console.error);
     } else {
       setRecordingNotes([]);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [currentTranscript]);
 
   // Load bookmarks when selection changes
   useEffect(() => {
+    let cancelled = false;
     if (selectedId) {
-      tauri.listBookmarks(selectedId).then(setBookmarks).catch(console.error);
+      const targetRecordingId = selectedId;
+      tauri
+        .listBookmarks(targetRecordingId)
+        .then((bms) => {
+          if (!cancelled) setBookmarks(bms);
+        })
+        .catch(console.error);
     } else {
       setBookmarks([]);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId]);
 
   const handleSelect = (recording: Recording) => {
+    clearNotesError();
     if (selectedId === recording.id) {
+      selectedIdRef.current = null;
       setSelectedId(null);
       setCurrentTranscript(null);
       setViewingNote(null);
     } else {
+      selectedIdRef.current = recording.id;
       setSelectedId(recording.id);
       const t = transcriptMap.get(recording.id);
       setCurrentTranscript(t ?? null);
@@ -203,16 +243,19 @@ export default function LibraryPage() {
 
   const handleTranscribe = async (recordingId: string) => {
     try {
-      const transcript = await transcribeRecording(recordingId);
+      const transcript = await transcribeRecording(recordingId, { updateCurrent: false });
       setTranscriptMap((prev) => {
         const next = new Map(prev);
         next.set(recordingId, transcript);
         return next;
       });
+      if (selectedIdRef.current === recordingId) {
+        setCurrentTranscript(transcript);
+      }
       // Auto-rename recording from transcript content
-      const recording = recordings.find((r) => r.id === recordingId);
+      const recording = recordingsRef.current.find((r) => r.id === recordingId);
       if (recording && isAutoTitle(recording.title) && transcript.full_text.length > 20) {
-        autoRenameRecording(recordingId, transcript.full_text);
+        await autoRenameRecording(recordingId, transcript.full_text);
       }
       // Auto-generate notes if enabled (use transcript directly, not state)
       if (settings.auto_generate_notes && transcript) {
@@ -220,11 +263,16 @@ export default function LibraryPage() {
           const promptStyle = settings.default_prompt_style || "summary";
           const customPrompt = settings.default_custom_prompt || undefined;
           const note = await generateNotes(transcript.id, promptStyle, customPrompt);
-          const notes = await tauri.listNotes(transcript.id);
-          setRecordingNotes(notes);
-          setDetailTab("notes");
+          setNoteTranscriptIds((prev) => new Set(prev).add(transcript.id));
+          if (selectedIdRef.current === recordingId) {
+            const notes = await tauri.listNotes(transcript.id);
+            if (selectedIdRef.current === recordingId) {
+              setRecordingNotes(notes);
+              setDetailTab("notes");
+            }
+          }
           // Auto-rename from note title if still auto-titled
-          const rec = recordings.find((r) => r.id === recordingId);
+          const rec = recordingsRef.current.find((r) => r.id === recordingId);
           if (rec && isAutoTitle(rec.title) && note.title) {
             try {
               await tauri.renameRecording(rec.id, note.title);
@@ -241,6 +289,19 @@ export default function LibraryPage() {
   };
 
   const autoRenameRecording = async (recordingId: string, transcriptText: string) => {
+    try {
+      const aiTitle = await tauri.generateRecordingTitle(recordingId, transcriptText);
+      if (aiTitle && aiTitle.trim().length > 0) {
+        setRecordings((prev) =>
+          prev.map((r) =>
+            r.id === recordingId ? { ...r, title: aiTitle.trim() } : r
+          )
+        );
+        return;
+      }
+    } catch {
+      // Fallback to first sentence below if AI/CLI title generation fails.
+    }
     try {
       const preview = transcriptText.slice(0, 300);
       const firstSentence = preview.split(/[.!?]/)[0]?.trim();
@@ -259,15 +320,22 @@ export default function LibraryPage() {
 
   const handleGenerateNotes = async (promptStyle: string, customPrompt?: string) => {
     if (!currentTranscript) return;
+    const targetTranscriptId = currentTranscript.id;
+    const targetRecordingId = currentTranscript.recording_id;
     try {
-      const note = await generateNotes(currentTranscript.id, promptStyle, customPrompt);
-      // Refresh notes for this transcript
-      const notes = await tauri.listNotes(currentTranscript.id);
-      setRecordingNotes(notes);
-      setDetailTab("notes");
+      const note = await generateNotes(targetTranscriptId, promptStyle, customPrompt);
+      setNoteTranscriptIds((prev) => new Set(prev).add(targetTranscriptId));
+      // Refresh notes for this transcript only if the user is still viewing this recording
+      if (selectedIdRef.current === targetRecordingId) {
+        const notes = await tauri.listNotes(targetTranscriptId);
+        if (selectedIdRef.current === targetRecordingId) {
+          setRecordingNotes(notes);
+          setDetailTab("notes");
+        }
+      }
 
       // Also auto-rename recording if it still has the default title
-      const recording = recordings.find((r) => r.id === selectedId);
+      const recording = recordingsRef.current.find((r) => r.id === targetRecordingId);
       if (recording && isAutoTitle(recording.title) && note.title) {
         try {
           await tauri.renameRecording(recording.id, note.title);
@@ -407,16 +475,20 @@ export default function LibraryPage() {
     if (toTranscribe.length === 0) return;
     setBatchProgress({ current: 0, total: toTranscribe.length });
     for (let i = 0; i < toTranscribe.length; i++) {
+      const recId = toTranscribe[i];
       setBatchProgress({ current: i + 1, total: toTranscribe.length });
       try {
-        const transcript = await transcribeRecording(toTranscribe[i]);
+        const transcript = await transcribeRecording(recId, { updateCurrent: false });
         setTranscriptMap((prev) => {
           const next = new Map(prev);
-          next.set(toTranscribe[i], transcript);
+          next.set(recId, transcript);
           return next;
         });
+        if (selectedIdRef.current === recId) {
+          setCurrentTranscript(transcript);
+        }
       } catch (err) {
-        console.error("Failed to transcribe:", toTranscribe[i], err);
+        console.error("Failed to transcribe:", recId, err);
       }
     }
     setBatchProgress(null);
@@ -434,26 +506,35 @@ export default function LibraryPage() {
 
   const togglePlayback = async () => {
     if (!audioRef.current || !selectedRecording) return;
+    const targetRecordingId = selectedRecording.id;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
       // Save position immediately on pause.
       const posMs = Math.round(audioRef.current.currentTime * 1000);
-      tauri.updatePlaybackPosition(selectedRecording.id, posMs).catch(() => {});
+      tauri.updatePlaybackPosition(targetRecordingId, posMs).catch(() => {});
       setRecordings((prev) =>
-        prev.map((r) => r.id === selectedRecording.id ? { ...r, last_position_ms: posMs } : r)
+        prev.map((r) => r.id === targetRecordingId ? { ...r, last_position_ms: posMs } : r)
       );
     } else {
       if (!audioReady) {
         setAudioLoading(true);
         try {
-          const url = await tauri.getPlayableAudioUrl(selectedRecording.id);
+          const url = await tauri.getPlayableAudioUrl(targetRecordingId);
+          if (selectedIdRef.current !== targetRecordingId || !audioRef.current) {
+            setAudioLoading(false);
+            return;
+          }
           audioRef.current.src = url;
           await new Promise<void>((resolve, reject) => {
             if (!audioRef.current) return reject();
             audioRef.current.oncanplaythrough = () => resolve();
             audioRef.current.onerror = () => reject(new Error("Audio load failed"));
           });
+          if (selectedIdRef.current !== targetRecordingId || !audioRef.current) {
+            setAudioLoading(false);
+            return;
+          }
           setAudioReady(true);
           // Restore saved position.
           if (selectedRecording.last_position_ms > 0 && audioRef.current) {
@@ -467,6 +548,7 @@ export default function LibraryPage() {
         }
         setAudioLoading(false);
       }
+      if (selectedIdRef.current !== targetRecordingId || !audioRef.current) return;
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
     }
@@ -504,6 +586,53 @@ export default function LibraryPage() {
   };
 
   const untranscribedCount = recordings.filter((r) => !transcriptMap.has(r.id)).length;
+  const unnotedRecordings = useMemo(
+    () =>
+      recordings.filter((r) => {
+        const t = transcriptMap.get(r.id);
+        return t && t.full_text.trim().length > 20 && !noteTranscriptIds.has(t.id);
+      }),
+    [recordings, transcriptMap, noteTranscriptIds]
+  );
+
+  const handleBatchGenerateNotes = async (targetRecs?: Recording[]) => {
+    const queue = targetRecs ?? unnotedRecordings;
+    if (queue.length === 0) return;
+    setBatchAiProgress({ current: 0, total: queue.length });
+    const promptStyle = settings.default_prompt_style || "summary";
+    const customPrompt = settings.default_custom_prompt || undefined;
+
+    for (let i = 0; i < queue.length; i++) {
+      const rec = queue[i];
+      const transcript = transcriptMap.get(rec.id);
+      if (!transcript) continue;
+      setBatchAiProgress({ current: i + 1, total: queue.length });
+      try {
+        const note = await generateNotes(transcript.id, promptStyle, customPrompt);
+        setNoteTranscriptIds((prev) => new Set(prev).add(transcript.id));
+        if (selectedIdRef.current === rec.id) {
+          const notes = await tauri.listNotes(transcript.id);
+          if (selectedIdRef.current === rec.id) {
+            setRecordingNotes(notes);
+          }
+        }
+        const currentRec = recordingsRef.current.find((r) => r.id === rec.id) ?? rec;
+        if (note.title && (isAutoTitle(currentRec.title) || currentRec.title.length > 35)) {
+          try {
+            await tauri.renameRecording(rec.id, note.title);
+            setRecordings((prev) =>
+              prev.map((r) => (r.id === rec.id ? { ...r, title: note.title } : r))
+            );
+          } catch {
+            /* non-critical */
+          }
+        }
+      } catch (err) {
+        console.error(`Batch AI generation failed for ${rec.id}:`, err);
+      }
+    }
+    setBatchAiProgress(null);
+  };
 
   const libraryStats = useMemo(() => {
     const totalMs = recordings.reduce((sum, r) => sum + (r.duration_ms ?? 0), 0);
@@ -523,17 +652,22 @@ export default function LibraryPage() {
     if (queue.length === 0) return;
     setBatchProgress({ current: 0, total: queue.length });
     for (let i = 0; i < queue.length; i++) {
+      const rec = queue[i];
       setBatchProgress({ current: i + 1, total: queue.length });
       try {
-        const transcript = await tauri.transcribeRecording(queue[i].id);
+        const transcript = await transcribeRecording(rec.id, { updateCurrent: false });
         setTranscriptMap((prev) => {
           const next = new Map(prev);
-          next.set(queue[i].id, transcript);
+          next.set(rec.id, transcript);
           return next;
         });
+        if (selectedIdRef.current === rec.id) {
+          setCurrentTranscript(transcript);
+        }
         // Auto-rename from transcript
-        if (isAutoTitle(queue[i].title) && transcript.full_text.length > 20) {
-          autoRenameRecording(queue[i].id, transcript.full_text);
+        const latestRec = recordingsRef.current.find((r) => r.id === rec.id) ?? rec;
+        if (isAutoTitle(latestRec.title) && transcript.full_text.length > 20) {
+          await autoRenameRecording(rec.id, transcript.full_text);
         }
         // Auto-generate notes if enabled
         if (settings.auto_generate_notes) {
@@ -541,18 +675,25 @@ export default function LibraryPage() {
             const promptStyle = settings.default_prompt_style || "summary";
             const customPrompt = settings.default_custom_prompt || undefined;
             const note = await generateNotes(transcript.id, promptStyle, customPrompt);
-            if (isAutoTitle(queue[i].title) && note.title) {
+            if (selectedIdRef.current === rec.id) {
+              const notes = await tauri.listNotes(transcript.id);
+              if (selectedIdRef.current === rec.id) {
+                setRecordingNotes(notes);
+              }
+            }
+            const currentRec = recordingsRef.current.find((r) => r.id === rec.id) ?? rec;
+            if (isAutoTitle(currentRec.title) && note.title) {
               try {
-                await tauri.renameRecording(queue[i].id, note.title);
+                await tauri.renameRecording(rec.id, note.title);
                 setRecordings((prev) =>
-                  prev.map((r) => r.id === queue[i].id ? { ...r, title: note.title } : r)
+                  prev.map((r) => r.id === rec.id ? { ...r, title: note.title } : r)
                 );
               } catch { /* non-critical */ }
             }
           } catch { /* note generation error handled in hook */ }
         }
       } catch (err) {
-        console.error(`Batch transcribe failed for ${queue[i].id}:`, err);
+        console.error(`Batch transcribe failed for ${rec.id}:`, err);
       }
     }
     setBatchProgress(null);
@@ -868,6 +1009,30 @@ export default function LibraryPage() {
             className="bg-bg-input border border-border-subtle rounded pl-7 pr-3 py-1 text-[12px] text-text-primary placeholder:text-text-muted/60 outline-none focus:border-accent/60 transition-colors w-44"
           />
         </div>
+        {unnotedRecordings.length > 0 && (
+          <button
+            onClick={() => handleBatchGenerateNotes()}
+            disabled={!!batchAiProgress || isGenerating}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+              batchAiProgress
+                ? "bg-accent/15 text-accent"
+                : "text-text-muted hover:text-accent hover:bg-accent/10"
+            }`}
+            title={`Generate AI notes & titles for ${unnotedRecordings.length} transcribed recording${unnotedRecordings.length !== 1 ? "s" : ""}`}
+          >
+            {batchAiProgress ? (
+              <>
+                <div className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin" />
+                AI {batchAiProgress.current}/{batchAiProgress.total}
+              </>
+            ) : (
+              <>
+                <Zap size={10} />
+                AI All ({unnotedRecordings.length})
+              </>
+            )}
+          </button>
+        )}
         {untranscribedCount > 0 && (
           <button
             onClick={handleBatchTranscribe}
@@ -1058,10 +1223,24 @@ export default function LibraryPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          {hasTranscript && (
-                            <span className="text-[9px] font-medium text-success">
-                              T
-                            </span>
+                          {isRecordingTranscribing(recording.id) ? (
+                            <div
+                              className="w-2.5 h-2.5 border-[1.5px] border-accent/30 border-t-accent rounded-full animate-spin"
+                              title="Transcribing..."
+                            />
+                          ) : (
+                            hasTranscript && (
+                              <>
+                                <span className="text-[9px] font-medium text-success">
+                                  T
+                                </span>
+                                {noteTranscriptIds.has(transcriptMap.get(recording.id)!.id) && (
+                                  <span className="text-[9px] font-medium text-accent">
+                                    N
+                                  </span>
+                                )}
+                              </>
+                            )
                           )}
                           <button
                             onClick={(e) => handleToggleStar(recording.id, e)}
@@ -1096,6 +1275,21 @@ export default function LibraryPage() {
                 {multiSelected.size} selected
               </span>
               <div className="flex-1" />
+              <button
+                onClick={() => {
+                  const selectedRecs = recordings.filter(
+                    (r) => multiSelected.has(r.id) && transcriptMap.has(r.id)
+                  );
+                  handleBatchGenerateNotes(selectedRecs);
+                  setMultiSelected(new Set());
+                }}
+                disabled={!!batchAiProgress || isGenerating}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-text-muted hover:text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-40"
+                title="Generate AI notes & titles for selected"
+              >
+                <Zap size={10} />
+                AI Notes
+              </button>
               <button
                 onClick={handleBulkTranscribe}
                 disabled={!!batchProgress || isTranscribing}
@@ -1155,7 +1349,7 @@ export default function LibraryPage() {
                 <div className="pr-2">
                   <PromptPicker
                     onGenerate={handleGenerateNotes}
-                    isGenerating={isGenerating}
+                    isGenerating={isGeneratingForTranscript(currentTranscript.id)}
                   />
                 </div>
               )}
@@ -1295,14 +1489,14 @@ export default function LibraryPage() {
                       <div className="mt-3 pt-3 border-t border-border-subtle">
                         <button
                           onClick={() => handleTranscribe(selectedRecording.id)}
-                          disabled={isTranscribing}
+                          disabled={isRecordingTranscribing(selectedRecording.id)}
                           className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
-                            isTranscribing
+                            isRecordingTranscribing(selectedRecording.id)
                               ? "bg-white/5 text-text-muted cursor-not-allowed"
                               : "bg-white/5 text-text-muted hover:text-text-secondary hover:bg-white/10"
                           }`}
                         >
-                          {isTranscribing ? (
+                          {isRecordingTranscribing(selectedRecording.id) ? (
                             <span className="flex items-center gap-1.5">
                               <div className="w-2.5 h-2.5 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
                               {downloadProgress ? "Downloading model..." : transcriptionProgress !== null ? `Transcribing ${transcriptionProgress}%...` : "Transcribing..."}
@@ -1314,7 +1508,7 @@ export default function LibraryPage() {
                             </span>
                           )}
                         </button>
-                        {isTranscribing && (
+                        {isRecordingTranscribing(selectedRecording.id) && (
                           <div className="flex flex-col items-start gap-1 mt-2">
                             {downloadProgress && downloadProgress.total && downloadProgress.total > 0 ? (
                               <>
@@ -1353,14 +1547,14 @@ export default function LibraryPage() {
                       <p className="text-[12px] text-text-muted">No transcript yet</p>
                       <button
                         onClick={() => handleTranscribe(selectedRecording.id)}
-                        disabled={isTranscribing}
+                        disabled={isRecordingTranscribing(selectedRecording.id)}
                         className={`px-3 py-1.5 rounded text-[12px] font-medium transition-colors cursor-pointer ${
-                          isTranscribing
+                          isRecordingTranscribing(selectedRecording.id)
                             ? "bg-accent/30 text-accent/50 cursor-not-allowed"
                             : "bg-accent text-white hover:bg-accent-hover"
                         }`}
                       >
-                        {isTranscribing ? (
+                        {isRecordingTranscribing(selectedRecording.id) ? (
                           <span className="flex items-center gap-1.5">
                             <div className="w-3 h-3 border-[1.5px] border-white/30 border-t-white rounded-full animate-spin" />
                             {downloadProgress ? "Downloading model..." : transcriptionProgress !== null ? `Transcribing ${transcriptionProgress}%...` : "Transcribing..."}
@@ -1369,7 +1563,7 @@ export default function LibraryPage() {
                           "Transcribe"
                         )}
                       </button>
-                      {isTranscribing && (
+                      {isRecordingTranscribing(selectedRecording.id) && (
                         <div className="flex flex-col items-center gap-1 mt-1">
                           {downloadProgress && downloadProgress.total && downloadProgress.total > 0 ? (
                             <>

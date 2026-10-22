@@ -140,6 +140,7 @@ pub struct SettingsCache {
     pub default_transcription_engine: Option<String>,
     pub default_whisper_model: Option<String>,
     pub default_llm_provider: Option<String>,
+    pub llm_model: Option<String>,
     pub default_prompt_style: Option<String>,
     pub default_custom_prompt: Option<String>,
     pub g4f_url: Option<String>,
@@ -163,6 +164,7 @@ impl SettingsCache {
             }
             "default_whisper_model" | "whisper_model" => self.default_whisper_model = val,
             "default_llm_provider" => self.default_llm_provider = val,
+            "llm_model" => self.llm_model = val,
             "default_prompt_style" => self.default_prompt_style = val,
             "default_custom_prompt" => self.default_custom_prompt = val,
             "g4f_url" => self.g4f_url = val,
@@ -174,6 +176,7 @@ impl SettingsCache {
                 self.default_llm_provider = Some(match value {
                     "session_token" => "claude_session".to_string(),
                     "g4f" => "g4f".to_string(),
+                    "cli" => "cli".to_string(),
                     _ => "claude_api".to_string(),
                 });
             }

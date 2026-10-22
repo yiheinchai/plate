@@ -15,6 +15,7 @@ import type {
   TranscriptionProgressPayload,
   WhisperModelInfo,
   SearchResult,
+  CliToolInfo,
 } from "./types";
 
 // ─── Recording Commands ───
@@ -157,6 +158,20 @@ export async function deleteNote(id: string): Promise<void> {
 
 export async function updateNote(id: string, title: string, content: string): Promise<void> {
   return invoke<void>("update_note", { id, title, content });
+}
+
+export async function listAvailableClis(): Promise<CliToolInfo[]> {
+  return invoke<CliToolInfo[]>("list_available_clis");
+}
+
+export async function generateRecordingTitle(
+  recordingId: string,
+  transcriptText: string
+): Promise<string> {
+  return invoke<string>("generate_recording_title", {
+    recordingId,
+    transcriptText,
+  });
 }
 
 // ─── Bookmark Commands ───

@@ -7,11 +7,18 @@ export function useTranscript() {
   const [currentTranscript, setCurrentTranscript] = useState<Transcript | null>(
     null
   );
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcribingIds, setTranscribingIds] = useState<Set<string>>(new Set());
   const [transcriptionProgress, setTranscriptionProgress] = useState<number | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<ModelDownloadProgressPayload | null>(null);
   const [liveText, setLiveText] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const isTranscribing = transcribingIds.size > 0;
+  const isRecordingTranscribing = useCallback(
+    (recordingId: string | null | undefined) =>
+      !!recordingId && transcribingIds.has(recordingId),
+    [transcribingIds]
+  );
 
   // Listen for live transcript chunks.
   // Use a cancelled flag to handle React Strict Mode double-mounting,
@@ -66,34 +73,49 @@ export function useTranscript() {
     setLiveText("");
   }, []);
 
-  const transcribeRecording = useCallback(async (recordingId: string) => {
-    setIsTranscribing(true);
-    setTranscriptionProgress(null);
-    setError(null);
-    try {
-      const transcript = await tauri.transcribeRecording(recordingId);
-      setCurrentTranscript(transcript);
-      // Notify when transcription completes (useful for long recordings).
-      try {
-        const { sendNotification, isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
-        let permitted = await isPermissionGranted();
-        if (!permitted) permitted = (await requestPermission()) === "granted";
-        if (permitted) {
-          const preview = transcript.full_text.slice(0, 80).trim();
-          sendNotification({ title: "Transcription complete", body: preview || "Ready to review" });
-        }
-      } catch { /* notification not critical */ }
-      return transcript;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Transcription failed";
-      setError(message);
-      throw err;
-    } finally {
-      setIsTranscribing(false);
+  const transcribeRecording = useCallback(
+    async (recordingId: string, options?: { updateCurrent?: boolean }) => {
+      setTranscribingIds((prev) => {
+        const next = new Set(prev);
+        next.add(recordingId);
+        return next;
+      });
       setTranscriptionProgress(null);
-    }
-  }, []);
+      setError(null);
+      try {
+        const transcript = await tauri.transcribeRecording(recordingId);
+        if (options?.updateCurrent !== false) {
+          setCurrentTranscript((prev) =>
+            !prev || prev.recording_id === recordingId ? transcript : prev
+          );
+        }
+        // Notify when transcription completes (useful for long recordings).
+        try {
+          const { sendNotification, isPermissionGranted, requestPermission } = await import("@tauri-apps/plugin-notification");
+          let permitted = await isPermissionGranted();
+          if (!permitted) permitted = (await requestPermission()) === "granted";
+          if (permitted) {
+            const preview = transcript.full_text.slice(0, 80).trim();
+            sendNotification({ title: "Transcription complete", body: preview || "Ready to review" });
+          }
+        } catch { /* notification not critical */ }
+        return transcript;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Transcription failed";
+        setError(message);
+        throw err;
+      } finally {
+        setTranscribingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(recordingId);
+          return next;
+        });
+        setTranscriptionProgress(null);
+      }
+    },
+    []
+  );
 
   const loadTranscripts = useCallback(async (recordingId?: string) => {
     setError(null);
@@ -127,6 +149,8 @@ export function useTranscript() {
     transcripts,
     currentTranscript,
     isTranscribing,
+    transcribingIds,
+    isRecordingTranscribing,
     transcriptionProgress,
     downloadProgress,
     liveText,

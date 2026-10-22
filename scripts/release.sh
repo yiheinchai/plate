@@ -42,7 +42,13 @@ sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
 sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
 
 # Cargo.toml (only the first occurrence under [package])
-sed -i '' "0,/^version = \".*\"/s//version = \"${VERSION}\"/" src-tauri/Cargo.toml
+python3 -c '
+import re, sys
+p = "src-tauri/Cargo.toml"
+s = open(p).read()
+s = re.sub(r"^version = \"[^\"]*\"", f"version = \"{sys.argv[1]}\"", s, count=1, flags=re.M)
+open(p, "w").write(s)
+' "${VERSION}"
 
 # ─── Install frontend deps ───
 echo "==> Installing frontend dependencies"
@@ -55,7 +61,7 @@ export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 export MACOSX_DEPLOYMENT_TARGET="13.0"
 export CMAKE_OSX_DEPLOYMENT_TARGET="13.0"
 
-npx tauri build 2>&1 | tail -5
+npx tauri build
 
 # ─── Locate artifacts ───
 BUNDLE_DIR="src-tauri/target/release/bundle"

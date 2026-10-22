@@ -28,12 +28,13 @@ pub struct SettingsResponse {
 
 impl Default for SettingsResponse {
     fn default() -> Self {
+        let has_cli = crate::llm::cli::first_installed_cli_id().is_some();
         Self {
-            llm_auth_mode: "g4f".to_string(),
+            llm_auth_mode: if has_cli { "cli".to_string() } else { "g4f".to_string() },
             llm_session_token: String::new(),
             llm_organization_id: String::new(),
             llm_api_key: String::new(),
-            llm_model: "openai".to_string(),
+            llm_model: if has_cli { "auto".to_string() } else { "openai".to_string() },
             g4f_url: String::new(),
             transcription_engine: "whisper_local".to_string(),
             whisper_model: "ggml-base.en".to_string(),
@@ -162,10 +163,14 @@ pub async fn update_settings(
             cache.set("default_llm_provider", "g4f");
             cache.set("g4f_url", &settings.g4f_url);
         }
+        "cli" => {
+            cache.set("default_llm_provider", "cli");
+        }
         _ => {
             cache.set("default_llm_provider", "claude_api");
         }
     }
+    cache.set("llm_model", &settings.llm_model);
     // Always cache keys (may switch modes later).
     cache.set("anthropic_api_key", &settings.llm_api_key);
     cache.set("claude_session_key", &settings.llm_session_token);

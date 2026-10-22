@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+use std::os::raw::{c_int, c_void};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -7,6 +9,10 @@ use tracing::{error, info};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::transcription::model_manager::ModelManager;
+use crate::transcription::phonon_local::{
+    p2_free, p2_stream_close, p2_stream_feed, p2_stream_finish, p2_stream_next, p2_stream_open,
+    p2_stream_partial, PhononEngineHandle,
+};
 
 /// Interval in samples between live transcription chunks.
 /// At 16kHz, 48000 samples = 3 seconds of audio.
@@ -67,10 +73,15 @@ impl LiveTranscriber {
         model_name: String,
         language: Option<String>,
     ) {
+        if ModelManager::is_phonon_model(&model_name) {
+            Self::worker_loop_phonon(rx, app_handle, models_dir, model_name);
+            return;
+        }
+
         // Ensure model is downloaded.
         let manager = ModelManager::new(models_dir.clone());
         let model_path = manager.model_path(&model_name);
-        if !model_path.exists() {
+        if !manager.is_downloaded(&model_name) {
             info!(
                 "Live transcriber: auto-downloading model {}",
                 model_name
@@ -151,6 +162,127 @@ impl LiveTranscriber {
         }
 
         info!("Live transcriber stopped");
+    }
+
+    fn worker_loop_phonon(
+        rx: mpsc::Receiver<LiveMsg>,
+        app_handle: tauri::AppHandle,
+        models_dir: PathBuf,
+        model_name: String,
+    ) {
+        let manager = ModelManager::new(models_dir);
+        if !manager.is_downloaded(&model_name) {
+            info!(
+                "Live transcriber: auto-downloading Phonon-2 model {}",
+                model_name
+            );
+            if let Err(e) = manager.download_model(&model_name) {
+                error!("Live transcriber: failed to download Phonon-2 model: {}", e);
+                return;
+            }
+        }
+
+        let weights_dir = manager.model_path(&model_name);
+        let engine = match PhononEngineHandle::open(&weights_dir) {
+            Ok(e) => e,
+            Err(e) => {
+                error!("Live transcriber: failed to load Phonon-2 model: {}", e);
+                return;
+            }
+        };
+
+        let stream = unsafe { p2_stream_open(engine.as_ptr(), 16000) };
+        if stream.is_null() {
+            error!("Live transcriber: failed to open Phonon-2 stream");
+            return;
+        }
+
+        info!("Live transcriber started with Phonon-2 ({})", model_name);
+        let mut pending_samples: Vec<f32> = Vec::new();
+
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(LiveMsg::Samples(samples)) => {
+                    pending_samples.extend_from_slice(&samples);
+                }
+                Ok(LiveMsg::Stop) => {
+                    info!("Live transcriber (Phonon-2) stopping");
+                    if !pending_samples.is_empty() {
+                        let chunk: Vec<f32> = pending_samples.drain(..).collect();
+                        unsafe {
+                            p2_stream_feed(stream, chunk.as_ptr(), chunk.len() as c_int);
+                        }
+                    }
+                    unsafe {
+                        p2_stream_finish(stream);
+                        loop {
+                            let seg = p2_stream_next(stream);
+                            if seg.is_null() {
+                                break;
+                            }
+                            let text_ptr = (*seg).text;
+                            if !text_ptr.is_null() {
+                                let text = CStr::from_ptr(text_ptr).to_string_lossy().trim().to_string();
+                                if !text.is_empty() {
+                                    let _ = app_handle.emit(
+                                        "transcript-chunk",
+                                        serde_json::json!({
+                                            "text": text,
+                                            "is_final": true,
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+
+            if pending_samples.len() >= CHUNK_INTERVAL_SAMPLES {
+                let chunk: Vec<f32> = pending_samples.drain(..).collect();
+                unsafe {
+                    if p2_stream_feed(stream, chunk.as_ptr(), chunk.len() as c_int) >= 0 {
+                        loop {
+                            let seg = p2_stream_next(stream);
+                            if seg.is_null() {
+                                break;
+                            }
+                            let text_ptr = (*seg).text;
+                            if !text_ptr.is_null() {
+                                let text = CStr::from_ptr(text_ptr).to_string_lossy().trim().to_string();
+                                if !text.is_empty() {
+                                    let _ = app_handle.emit(
+                                        "transcript-chunk",
+                                        serde_json::json!({
+                                            "text": text,
+                                            "is_final": true,
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                        let partial_ptr = p2_stream_partial(stream);
+                        if !partial_ptr.is_null() {
+                            let partial = CStr::from_ptr(partial_ptr).to_string_lossy().trim().to_string();
+                            p2_free(partial_ptr as *mut c_void);
+                            let _ = app_handle.emit(
+                                "transcript-chunk",
+                                serde_json::json!({
+                                    "text": partial,
+                                    "is_final": false,
+                                }),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        unsafe { p2_stream_close(stream) };
+        info!("Live transcriber (Phonon-2) stopped");
     }
 
     /// Run Whisper inference on an audio chunk. Returns the full text or None on error.

@@ -14,6 +14,12 @@ use super::types::{AudioSource, RecordingConfig, RecordingResult};
 /// Size of the ring buffer in samples (~10 seconds at 16 kHz).
 const RING_BUFFER_SIZE: usize = 16000 * 10;
 
+/// Speech recordings do not benefit from storing 32-bit floats on disk.
+/// Quantize only at the file boundary; capture, levels, and transcription stay f32.
+pub(crate) fn sample_to_i16(sample: f32) -> i16 {
+    (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
+}
+
 /// Manages a recording session: captures audio from the chosen source(s),
 /// drains a ring buffer, and writes a WAV file.
 pub struct Recorder {
@@ -22,6 +28,7 @@ pub struct Recorder {
     sample_rate: u32,
     app_handle: tauri::AppHandle,
     models_dir: PathBuf,
+    live_model: String,
 }
 
 impl Recorder {
@@ -38,7 +45,13 @@ impl Recorder {
             sample_rate,
             app_handle,
             models_dir,
+            live_model: "ggml-tiny.en".to_string(),
         }
+    }
+
+    pub fn with_live_model(mut self, live_model: String) -> Self {
+        self.live_model = live_model;
+        self
     }
 
     /// Run the recording synchronously (blocking). Call from a dedicated thread.
@@ -83,7 +96,7 @@ impl Recorder {
         let live_transcriber = LiveTranscriber::new(
             self.app_handle.clone(),
             self.models_dir.clone(),
-            "ggml-tiny.en".to_string(),
+            self.live_model.clone(),
             Some("en".to_string()),
         );
 
@@ -91,8 +104,8 @@ impl Recorder {
         let spec = WavSpec {
             channels: 1,
             sample_rate: self.sample_rate,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
         };
         let mut writer =
             WavWriter::create(&self.output_path, spec).context("Failed to create WAV file")?;
@@ -117,7 +130,7 @@ impl Recorder {
                 // Drain remaining samples before exiting.
                 let remaining = consumer.pop_slice(&mut buf);
                 for &sample in &buf[..remaining] {
-                    writer.write_sample(sample)?;
+                    writer.write_sample(sample_to_i16(sample))?;
                     total_samples += 1;
                 }
                 if let Some(ref lt) = live_transcriber {
@@ -139,7 +152,7 @@ impl Recorder {
                     );
                 } else {
                     for &sample in &buf[..count] {
-                        writer.write_sample(sample)?;
+                        writer.write_sample(sample_to_i16(sample))?;
                         total_samples += 1;
                         level_sum_sq += sample * sample;
                         level_samples += 1;
@@ -187,5 +200,20 @@ impl Recorder {
             sample_rate: self.sample_rate,
             source: self.config.source.clone(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sample_to_i16;
+
+    #[test]
+    fn quantizes_and_clamps_float_samples() {
+        assert_eq!(sample_to_i16(0.0), 0);
+        assert_eq!(sample_to_i16(1.0), 32767);
+        assert_eq!(sample_to_i16(-1.0), -32767);
+        assert_eq!(sample_to_i16(2.0), 32767);
+        assert_eq!(sample_to_i16(-2.0), -32767);
+        assert_eq!(sample_to_i16(0.5), 16384);
     }
 }
